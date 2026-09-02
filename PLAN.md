@@ -397,6 +397,9 @@ Server validates: weapon fire rate, player alive, ammo available, shot possible.
 
 ### Phase 2 — Multiplayer Movement
 
+> **Executor resource:** `docs/phase2-multiplayer-movement.md` — detailed steps,
+> current-state notes, known issues, and file map required to implement this phase.
+
 **Goal:** Multiple players connect, move around the same map, and see each other smoothly.
 
 **Steps:**
