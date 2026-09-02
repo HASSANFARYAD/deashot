@@ -1,0 +1,21 @@
+{
+  "name": "game-server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@deashot/shared": "workspace:*",
+    "@deashot/game-config": "workspace:*",
+    "colyseus": "^0.15.0",
+    "@colyseus/schema": "^2.0.37"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}
