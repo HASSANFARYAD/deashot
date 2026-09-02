@@ -146,22 +146,10 @@ export class GameEngine {
   private wireSocket(socket: GameSocket) {
     const { callbacks } = socket;
 
-    callbacks.onPlayerAdd = (p) => {
-      if (p.id === socket.sessionId) return;
-      this.remote.add(p.id, p);
-    };
-    callbacks.onPlayerChange = (p) => {
-      if (p.id === socket.sessionId) return;
-      this.remote.update(p.id, p, Date.now());
-    };
-    callbacks.onPlayerRemove = (id) => {
-      this.remote.remove(id);
-    };
-
     callbacks.onSnapshot = (snapshot) => {
-      // Reconcile local player against authoritative server position.
       const self = snapshot.players[socket.sessionId];
       if (self) {
+        // Reconcile local player against authoritative server position.
         const dx = self.x - this.player.position.x;
         const dy = self.y - this.player.position.y;
         const dz = self.z - this.player.position.z;
@@ -169,6 +157,21 @@ export class GameEngine {
           this.player.position.set(self.x, self.y, self.z);
           this.camera.update(self.x, self.y, self.z);
         }
+      }
+
+      // Drive remote players from the snapshot so they render reliably.
+      const seen = new Set<string>();
+      for (const sid in snapshot.players) {
+        const p = snapshot.players[sid];
+        if (sid === socket.sessionId) continue;
+        seen.add(sid);
+        if (!this.remote.has(sid)) {
+          this.remote.add(sid, p);
+        }
+        this.remote.update(sid, p, Date.now());
+      }
+      for (const sid of this.remote.keys()) {
+        if (!seen.has(sid)) this.remote.remove(sid);
       }
     };
 

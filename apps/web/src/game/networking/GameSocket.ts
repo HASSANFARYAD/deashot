@@ -106,28 +106,9 @@ export class GameSocket {
       }
     };
 
-    if (state.players) {
-      // Player appears / updates / leaves.
-      state.players.onAdd = (p: any) => {
-        players[p.id] = readPlayer(p);
-        refreshPlayers();
-        this.callbacks.onPlayerAdd?.(readPlayer(p));
-        this.emitSnapshot();
-      };
-      state.players.onChange = (p: any, _key: string) => {
-        players[p.id] = readPlayer(p);
-        refreshPlayers();
-        this.callbacks.onPlayerChange?.(readPlayer(p));
-      };
-      state.players.onRemove = (p: any) => {
-        delete players[p.id];
-        this.callbacks.onPlayerRemove?.(p.id);
-        this.emitSnapshot();
-      };
-    }
-
-    // Emit a snapshot periodically at the server snapshot rate so the local
-    // player reconciliation stays in sync. Refresh on any schema change too.
+    // Emit a snapshot periodically to drive reconciliation + interpolation.
+    // (The remote-player snapshot source is the periodic timer below; we also
+    // nudge on any schema change when available.)
     const update = () => {
       refreshPlayers();
       this.mirror = {
@@ -141,12 +122,12 @@ export class GameSocket {
     };
 
     if (typeof state.onChange === "function") {
-      // Re-create each connect: Colyseus `onChange` returns an unsubscribe fn.
+      // Colyseus `onChange` returns an unsubscribe fn.
       (state as any).__phase2Unsub?.();
       (state as any).__phase2Unsub = state.onChange(update);
     }
 
-    // Periodic snapshot to drive interpolation + reconciliation.
+    // Periodic snapshot to drive interpolation + reconciliation (50 Hz poll).
     this.snapshotTimer = setInterval(update, 1000 / 50);
 
     this.room.onLeave(() => {
@@ -162,10 +143,6 @@ export class GameSocket {
       () => this.flushInput(),
       1000 / CLIENT_INPUT_RATE
     );
-  }
-
-  private emitSnapshot() {
-    this.callbacks.onSnapshot?.(this.mirror);
   }
 
   /** Queue the latest input to send on the next interval tick. */

@@ -42,6 +42,14 @@ export class RemotePlayers {
     this.interpDelay = delayMs;
   }
 
+  has(sessionId: string): boolean {
+    return this.players.has(sessionId);
+  }
+
+  keys(): IterableIterator<string> {
+    return this.players.keys();
+  }
+
   add(sessionId: string, player: SnapshotPlayer) {
     if (this.players.has(sessionId)) return;
 
