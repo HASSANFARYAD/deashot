@@ -8,7 +8,10 @@
     "dev:api": "turbo dev --filter=api",
     "build": "turbo build",
     "lint": "turbo lint",
-    "typecheck": "turbo typecheck"
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:unit": "turbo test",
+    "test:integration": "node scripts/run-integration.cjs"
   },
   "devDependencies": {
     "turbo": "^2.5.0",

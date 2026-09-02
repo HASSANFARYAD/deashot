@@ -19,12 +19,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && node ../../scripts/fix-package-type.mjs .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "dev": "tsc -p tsconfig.esm.json --watch"
   },
   "dependencies": {
     "@deashot/shared": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
   }
 }
