@@ -23,19 +23,19 @@ export interface PlayerState {
   deaths: number;
 }
 
-export type MatchPhase = "waiting" | "warmup" | "in-progress" | "ended";
+export type MatchPhase = "waiting" | "in-progress" | "ended";
 
 export interface MatchState {
   id: string;
   mode: "tdm";
   map: string;
   phase: MatchPhase;
-  /** Seconds remaining, or duration when in warmup. */
+  /** Seconds remaining. */
   timeRemaining: number;
-  /** Team score: kills per team. */
-  scores: Record<Team, number>;
-  /** Kill target to win (when score limit reached). */
-  killLimit: number;
+  /** Blue team total kills. */
+  blueScore: number;
+  /** Red team total kills. */
+  redScore: number;
   players: Record<string, PlayerState>;
 }
 

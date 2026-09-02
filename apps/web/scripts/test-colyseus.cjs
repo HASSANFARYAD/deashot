@@ -14,7 +14,7 @@ async function run() {
   const sameRoom = roomA.id === roomB.id;
   console.log("[test] Both clients in same room:", sameRoom ? "YES" : "NO");
 
-  // Send an input from A and verify state syncs.
+  // Send an input from A and verify state syncs (player count).
   roomA.send("input", {
     sequence: 1,
     tick: 0,
@@ -36,8 +36,28 @@ async function run() {
   console.log("[test] Player count in room:", playerCount);
   console.log("[test] Phase:", stateA.phase);
 
-  const success = sameRoom && playerCount >= 2;
-  console.log("[test] RESULT:", success ? "PASS - two clients joined same room" : "FAIL");
+  // Movement sync check: after a forward input with the default team spawn,
+  // at least one player's position should have moved from its spawn.
+  const players = stateA.players;
+  let moved = false;
+  if (players) {
+    for (const [sid, p] of players) {
+      if (typeof p.x === "number" && p.x !== 0) {
+        moved = true;
+        console.log(
+          `[test] Player ${sid.slice(0, 6)} position (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})`
+        );
+      }
+    }
+  }
+
+  const success = sameRoom && playerCount >= 2 && moved;
+  console.log(
+    "[test] RESULT:",
+    success
+      ? "PASS - two clients joined same room + movement sync"
+      : "FAIL"
+  );
 
   await roomA.leave();
   await roomB.leave();

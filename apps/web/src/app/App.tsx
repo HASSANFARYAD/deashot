@@ -10,7 +10,7 @@ export function App() {
       {screen === "home" ? (
         <Home onPlay={() => setScreen("game")} />
       ) : (
-        <GamePage onExit={() => setScreen("home")} />
+        <GamePage online onExit={() => setScreen("home")} />
       )}
     </div>
   );

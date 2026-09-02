@@ -6,9 +6,10 @@ import { PointerPrompt } from "../components/HUD/PointerPrompt";
 
 interface GamePageProps {
   onExit: () => void;
+  online?: boolean;
 }
 
-export function GamePage({ onExit }: GamePageProps) {
+export function GamePage({ onExit, online = false }: GamePageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<{ dispose: () => void } | null>(null);
   const [gameState, setGameState] = useState<GameState>({
@@ -24,9 +25,13 @@ export function GamePage({ onExit }: GamePageProps) {
     const el = containerRef.current;
     if (!el) return;
 
-    const game = createGame(el, (state) => {
-      setGameState(state);
-    });
+    const game = createGame(
+      el,
+      (state) => {
+        setGameState(state);
+      },
+      { online }
+    );
     engineRef.current = game;
 
     const onLockChange = () => {
@@ -39,7 +44,7 @@ export function GamePage({ onExit }: GamePageProps) {
       game.dispose();
       engineRef.current = null;
     };
-  }, []);
+  }, [online]);
 
   return (
     <div style={styles.root}>

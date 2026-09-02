@@ -1,6 +1,6 @@
 # 0001 — Game Design
 
-**Status:** Implemented | **Version:** 1.0 | **Owner:** @HASSANFARYAD
+**Status:** Implemented | **Version:** 1.1 | **Owner:** @HASSANFARYAD
 
 ## Overview
 
@@ -22,7 +22,7 @@ at 60 FPS with fair, server-authoritative gameplay.
 - **Duration:** 600 seconds (`MATCH_DURATION` in `packages/shared/src/constants.ts`)
 - **Win condition:** first team to `KILL_LIMIT` (50) wins; if time expires, highest score wins
 - **Spawning:** team-specific spawn points; respawn after a 3-second delay (`RESPAWN_DELAY`)
-- **Match phases:** `waiting` → `in-progress` → `finished`; auto-starts when enough players join
+- **Match phases:** `waiting` → `in-progress` → `ended`; auto-starts when enough players join
 
 ## Weapon: Assault Rifle
 
@@ -69,4 +69,5 @@ Client and server both apply physics from the same inputs for deterministic pred
 
 **Changelog**
 
+- v1.1 — Phase 2: corrected match end phase name (`ended`, not `finished`)
 - v1.0 — Initial spec (Phase 0 planning)

@@ -1,13 +1,13 @@
 # 0003 — Networking Protocol
 
-**Status:** Implemented | **Version:** 1.0 | **Owner:** @HASSANFARYAD
+**Status:** Implemented | **Version:** 2.0 | **Owner:** @HASSANFARYAD
 
 ## Overview
 
 The networking model is server-authoritative with client-side prediction.
 The client sends inputs to the server; the server simulates and broadcasts
 state snapshots to all clients. Clients interpolate between authoritative
-snapshots and reconcile predicted state.
+snapshots for remote players and reconcile their own predicted state.
 
 ## Direction of data flow
 
@@ -50,11 +50,16 @@ Defined using `@colyseus/schema` in `packages/shared/src/protocol/state.ts`.
 | id | `string` | Room ID |
 | mode | `string` | Always `"tdm"` for MVP |
 | map | `string` | Always `"arena"` for MVP |
-| phase | `MatchPhase` | `waiting` \| `in-progress` \| `finished` |
+| phase | `MatchPhase` | `waiting` \| `in-progress` \| `ended` |
 | timeRemaining | `number` | Seconds left in match |
 | blueScore | `number` | Blue team total kills |
 | redScore | `number` | Red team total kills |
 | players | `MapSchema<PlayerState>` | Keyed by session ID |
+
+> The canonical `MatchState` schema is defined on the server in
+> `apps/game-server/src/rooms/TeamDeathmatchRoom.ts` (`MatchStateSchema`).
+> `packages/shared/src/protocol/state.ts` mirrors it as a plain interface
+> (`MatchState`) for typing client code.
 
 ### PlayerState
 
@@ -73,18 +78,34 @@ Defined using `@colyseus/schema` in `packages/shared/src/protocol/state.ts`.
 
 ## Server → Client: snapshot broadcast
 
-Snapshots are sent at `SERVER_SNAPSHOT_RATE` (20 Hz). Each broadcast contains
-the full `MatchState` (all player positions, scores, time remaining). Clients
-overwrite their local state with the authoritative snapshot and then re-apply
-any unacknowledged inputs for prediction.
+Snapshots are broadcast via the Colyseus schema state (matching
+`SERVER_SNAPSHOT_RATE` = 20 Hz; the client additionally polls the schema at 50 Hz
+for interpolation density). All player positions, scores, and time
+remaining sync through the schema.
+
+### Client prediction (local player)
+
+The client runs the same movement simulation locally so input feels instant
+(`PlayerController.update`). It sends `PlayerInput` at 30 Hz. On each incoming
+snapshot it compares the server-authoritative position to its predicted
+position; if the error exceeds `RECONCILE_TOLERANCE` (0.5 m), it snaps the
+local player to the authoritative position (reconciliation).
+
+### Remote player interpolation
+
+Remote players are not directly snapped. Each remote player keeps a small ring
+buffer of (time, position) samples. Each frame the client picks the two samples
+bracketing a render time (buffered ~1 snapshot interval behind now) and lerps
+between them. This removes the discrete snapshot "steps". See
+`apps/web/src/game/systems/RemotePlayers.ts`.
 
 ## Message types
 
 | Name | Direction | Payload | Notes |
 |---|---|---|---|
 | `"input"` | Client → Server | `PlayerInput` | 30 Hz, reliable |
-| `"respawn"` | Client → Server | `{}` | Request respawn after death |
-| `"match-ended"` | Server → Clients | `{ winner: Team, blueScore, redScore }` | End-of-match broadcast |
+| `"respawn"` | Client → Server | `{}` | Request respawn after death (server also auto-respawns) |
+| `"match-ended"` | Server → Clients | `{ blueScore, redScore }` | End-of-match broadcast |
 
 ## Constants
 
@@ -94,14 +115,26 @@ any unacknowledged inputs for prediction.
 | `CLIENT_INPUT_RATE` | 30 Hz | `packages/shared/src/constants.ts` |
 | `SERVER_SNAPSHOT_RATE` | 20 Hz | `packages/shared/src/constants.ts` |
 
+## Implemented behaviour (Phase 2)
+
+- Server simulates camera-relative movement (forward follows `yaw`), matching
+  the client prediction convention.
+- Server clamps positions to `MAP_BOUNDS.halfExtent` (±48) so authority matches
+  the renderer.
+- Team auto-assignment and spawns come from `MAP_SPAWNS` in
+  `packages/game-config` (single source of truth; resolved the old ±20 vs ±30
+  mismatch).
+
 ## Future phases
 
-- **Phase 2:** Client prediction (apply own inputs locally, reconcile on next snapshot)
-- **Phase 3:** Interpolation for remote players (smooth movement between snapshots)
-- **Phase 4:** Lag compensation (rewind server state for hit validation)
+- **Phase 3:** Lag compensation (rewind server state for hit validation)
+- **Later:** Full replays of unacknowledged inputs instead of snap-to-tolerance
 
 ---
 
 **Changelog**
 
+- v2.0 — Phase 2: implemented client prediction + reconciliation, remote player
+  interpolation, camera-relative server movement, unified map/spawn config;
+  corrected `MatchPhase` (`ended` not `finished`), documented client polling.
 - v1.0 — Initial spec (Phase 0 + 1 protocol baseline)

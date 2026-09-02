@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { MAP_BOUNDS } from "@deashot/game-config";
 
 interface AABB {
   minX: number;
@@ -82,7 +83,7 @@ export class CollisionWorld {
     }
 
     // Clamp to map bounds.
-    const MAP_HALF = 48;
+    const MAP_HALF = MAP_BOUNDS.halfExtent;
     x = Math.max(-MAP_HALF, Math.min(MAP_HALF, x));
     z = Math.max(-MAP_HALF, Math.min(MAP_HALF, z));
 
