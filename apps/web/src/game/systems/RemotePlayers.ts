@@ -50,6 +50,20 @@ export class RemotePlayers {
     return this.players.keys();
   }
 
+  /** Debug/testing accessor: current remote player count. */
+  getCount(): number {
+    return this.players.size;
+  }
+
+  /** Debug/testing accessor: live positions of all remote player meshes. */
+  getPositions(): Array<{ id: string; x: number; y: number; z: number }> {
+    const out: Array<{ id: string; x: number; y: number; z: number }> = [];
+    for (const [id, { mesh }] of this.players) {
+      out.push({ id, x: mesh.position.x, y: mesh.position.y, z: mesh.position.z });
+    }
+    return out;
+  }
+
   add(sessionId: string, player: SnapshotPlayer) {
     if (this.players.has(sessionId)) return;
 

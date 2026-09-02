@@ -262,6 +262,25 @@ export class GameEngine {
     return this.fps;
   }
 
+  /** Debug/testing accessor: local player's world position. */
+  getLocalPosition(): { x: number; y: number; z: number } {
+    return {
+      x: this.player.position.x,
+      y: this.player.position.y,
+      z: this.player.position.z,
+    };
+  }
+
+  /** Debug/testing accessor: remote player meshes currently rendered. */
+  getRemotePlayers(): Array<{ id: string; x: number; y: number; z: number }> {
+    return this.remote.getPositions();
+  }
+
+  /** Debug/testing accessor: whether connected to the server. */
+  isConnected(): boolean {
+    return this.socket?.connected ?? false;
+  }
+
   dispose() {
     this.running = false;
     if (this.stateInterval) clearInterval(this.stateInterval);

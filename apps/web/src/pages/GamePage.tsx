@@ -34,6 +34,9 @@ export function GamePage({ onExit, online = false }: GamePageProps) {
     );
     engineRef.current = game;
 
+    // Expose for automated browser tests (Playwright) to introspect the scene.
+    (window as any).__deashotEngine = game.getEngine();
+
     const onLockChange = () => {
       setPointerLocked(document.pointerLockElement !== null);
     };
