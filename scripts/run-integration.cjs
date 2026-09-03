@@ -1,16 +1,21 @@
 /**
  * Integration test runner.
- * Starts the game server, runs the two-client Colyseus join test, then exits.
- * Exit code = 0 if the test passes, 1 otherwise.
+ * Phase 1: starts the game server, runs the two-client Colyseus join test.
+ * Phase 2: builds + serves the web app, runs the Playwright browser gate test.
+ * Exit code = 0 if both phases pass, 1 otherwise.
  */
 const { spawn, execSync } = require("child_process");
 const net = require("net");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const SERVER = path.join(ROOT, "apps", "game-server", "dist", "index.js");
-const TEST   = path.join(ROOT, "apps", "web", "scripts", "test-colyseus.cjs");
-const PORT   = 2567;
+const SERVER  = path.join(ROOT, "apps", "game-server", "dist", "index.js");
+const COLYSEUS_TEST = path.join(ROOT, "apps", "web", "scripts", "test-colyseus.cjs");
+const BROWSER_TEST  = path.join(ROOT, "apps", "web", "scripts", "test-browser-gate.cjs");
+const WEB_DIST = path.join(ROOT, "apps", "web", "dist", "index.html");
+
+const SERVER_PORT = 2567;
+const WEB_PORT    = 4173;
 
 function waitForPort(port, timeoutMs = 30_000) {
   return new Promise((resolve, reject) => {
@@ -20,7 +25,7 @@ function waitForPort(port, timeoutMs = 30_000) {
       s.once("connect", () => { s.destroy(); resolve(); });
       s.once("error", () => {
         s.destroy();
-        if (Date.now() - start > timeoutMs) return reject(new Error("Server timed out"));
+        if (Date.now() - start > timeoutMs) return reject(new Error(`Port ${port} timed out`));
         setTimeout(check, 200);
       });
       s.connect(port, "127.0.0.1");
@@ -29,28 +34,66 @@ function waitForPort(port, timeoutMs = 30_000) {
   });
 }
 
+function killProc(proc, label) {
+  if (!proc || proc.killed) return;
+  console.log(`[integration] Stopping ${label} (pid ${proc.pid})...`);
+  proc.kill("SIGTERM");
+  proc.unref();
+}
+
 async function main() {
-  console.log("[integration] Starting game server...");
-  const server = spawn(process.execPath, [SERVER], {
-    cwd: path.join(ROOT, "apps", "game-server"),
-    stdio: "ignore",
-    env: { ...process.env, PORT: String(PORT) },
-  });
+  let serverProc = null;
+  let webProc    = null;
+  let failed     = false;
 
   try {
-    await waitForPort(PORT);
-    console.log("[integration] Server listening on port " + PORT);
+    // ===== Phase 1: Colyseus two-client join + movement sync =====
+    console.log("[integration] Phase 1 — Colyseus two-client test");
+    serverProc = spawn(process.execPath, [SERVER], {
+      cwd: path.join(ROOT, "apps", "game-server"),
+      stdio: "ignore",
+      env: { ...process.env, PORT: String(SERVER_PORT) },
+    });
+    await waitForPort(SERVER_PORT);
+    console.log("[integration] Game server listening on port " + SERVER_PORT);
     console.log("[integration] Running two-client Colyseus join test...");
-    execSync(`node "${TEST}"`, { cwd: ROOT, stdio: "inherit" });
-    console.log("[integration] PASSED");
+    execSync(`node "${COLYSEUS_TEST}"`, { cwd: ROOT, stdio: "inherit" });
+    console.log("[integration] Phase 1 PASSED\n");
+
+    // ===== Phase 2: Playwright browser gate test =====
+    console.log("[integration] Phase 2 — Playwright browser gate test");
+
+    // Ensure the web app is built.
+    console.log("[integration] Building web app...");
+    execSync("pnpm --filter web build", { cwd: ROOT, stdio: "inherit" });
+
+    // Start a static file server for the built web app.
+    console.log(`[integration] Starting web preview on port ${WEB_PORT}...`);
+    const staticServer = path.join(ROOT, "scripts", "static-server.cjs");
+    webProc = spawn(process.execPath, [staticServer, String(WEB_PORT)], {
+      cwd: ROOT,
+      stdio: "ignore",
+    });
+    await waitForPort(WEB_PORT);
+    console.log("[integration] Web preview ready on port " + WEB_PORT);
+
+    console.log("[integration] Running Playwright browser gate test...");
+    execSync(
+      `node "${BROWSER_TEST}" --port ${WEB_PORT}`,
+      { cwd: ROOT, stdio: "inherit" }
+    );
+    console.log("[integration] Phase 2 PASSED\n");
+
+    console.log("[integration] ALL TESTS PASSED");
   } catch (err) {
     console.error("[integration] FAILED:", err.message || err);
-    process.exitCode = 1;
+    failed = true;
   } finally {
-    console.log("[integration] Shutting down server (pid " + server.pid + ")...");
-    server.kill("SIGTERM");
-    server.unref();
+    killProc(webProc, "web preview");
+    killProc(serverProc, "game server");
   }
+
+  process.exitCode = failed ? 1 : 0;
 }
 
 main();
