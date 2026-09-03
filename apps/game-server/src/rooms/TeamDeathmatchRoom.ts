@@ -10,6 +10,9 @@ import {
   GRAVITY,
   MAP_SPAWNS,
   MAP_BOUNDS,
+  ASSAULT_RIFLE,
+  PLAYER_HEIGHT,
+  PLAYER_RADIUS,
 } from "@deashot/game-config";
 
 /** Syncable player state schema sent to all clients. */
@@ -27,6 +30,8 @@ export class PlayerStateSchema extends Schema {
   @type("boolean") alive: boolean = true;
   @type("number") kills: number = 0;
   @type("number") deaths: number = 0;
+  @type("number") ammo: number = 30;
+  @type("boolean") reloading: boolean = false;
 }
 
 /** Syncable match state schema. */
@@ -52,6 +57,8 @@ interface SimPlayer {
   respawnAt: number;
   yaw: number;
   pitch: number;
+  lastFireTime: number;
+  reloadTimer: number;
 }
 
 interface PendingInput {
@@ -96,6 +103,13 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
         reload: !!input.reload,
       });
     });
+
+    this.onMessage("shoot", (client, msg: any) => {
+      if (!msg || typeof msg !== "object") return;
+      if (typeof msg.ox !== "number" || typeof msg.oy !== "number" || typeof msg.oz !== "number") return;
+      if (typeof msg.dx !== "number" || typeof msg.dy !== "number" || typeof msg.dz !== "number") return;
+      this.handleShoot(client.sessionId, msg);
+    });
   }
 
   onJoin(client: Client) {
@@ -126,6 +140,8 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
       respawnAt: 0,
       yaw: 0,
       pitch: 0,
+      lastFireTime: 0,
+      reloadTimer: 0,
     });
 
     // Auto-start when enough players join (MVP: start on first join for testing).
@@ -187,6 +203,9 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
           s.alive = true;
           p.alive = true;
           p.health = PLAYER_MAX_HEALTH;
+          p.ammo = ASSAULT_RIFLE.stats.magazineSize;
+          p.reloading = false;
+          s.reloadTimer = 0;
           const spawn = SPAWNS[p.team as "blue" | "red"][s.deaths % (SPAWNS[p.team as "blue" | "red"].length)];
           p.x = spawn.x;
           p.y = spawn.y;
@@ -196,6 +215,21 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
           s.velZ = 0;
         }
         continue;
+      }
+
+      // Weapon reload timer.
+      if (s.reloadTimer > 0) {
+        s.reloadTimer -= h;
+        if (s.reloadTimer <= 0) {
+          s.reloadTimer = 0;
+          p.reloading = false;
+          p.ammo = ASSAULT_RIFLE.stats.magazineSize;
+        }
+      }
+      // Auto-reload when empty.
+      if (p.ammo <= 0 && !p.reloading && s.reloadTimer <= 0) {
+        s.reloadTimer = ASSAULT_RIFLE.stats.reloadTime;
+        p.reloading = true;
       }
 
       if (!input) continue;
@@ -263,6 +297,153 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
       p.x = Math.max(-limit, Math.min(limit, p.x));
       p.z = Math.max(-limit, Math.min(limit, p.z));
     }
+  }
+
+  private handleShoot(
+    sessionId: string,
+    msg: { ox: number; oy: number; oz: number; dx: number; dy: number; dz: number }
+  ) {
+    const p = this.state.players.get(sessionId);
+    const s = this.sim.get(sessionId);
+    if (!p || !s) return;
+    if (!p.alive) return;
+
+    const now = Date.now() / 1000;
+    const stats = ASSAULT_RIFLE.stats;
+
+    // Fire rate check.
+    const fireInterval = 60 / stats.fireRate;
+    if (now - s.lastFireTime < fireInterval) return;
+
+    // Ammo check.
+    if (p.ammo <= 0 || s.reloadTimer > 0) return;
+
+    // Fire!
+    s.lastFireTime = now;
+    p.ammo--;
+
+    // Auto-reload when empty.
+    if (p.ammo <= 0) {
+      s.reloadTimer = stats.reloadTime;
+      p.reloading = true;
+    }
+
+    // Normalize direction.
+    const len = Math.sqrt(msg.dx * msg.dx + msg.dy * msg.dy + msg.dz * msg.dz);
+    if (len < 0.001) return;
+    const dx = msg.dx / len;
+    const dy = msg.dy / len;
+    const dz = msg.dz / len;
+
+    // Hitscan raycast against all alive players.
+    const origin = { x: msg.ox, y: msg.oy, z: msg.oz };
+    const direction = { x: dx, y: dy, z: dz };
+
+    let closestT = stats.range;
+    let closestId: string | null = null;
+    let headshot = false;
+
+    for (const [id, target] of this.state.players) {
+      if (id === sessionId) continue;
+      if (!target.alive) continue;
+      // Friendly fire off.
+      if (target.team === p.team) continue;
+
+      const hit = this.raycastPlayerCapsule(origin, direction, target);
+      if (hit && hit.t < closestT) {
+        closestT = hit.t;
+        closestId = id;
+        headshot = hit.headshot;
+      }
+    }
+
+    if (closestId) {
+      const victim = this.state.players.get(closestId);
+      const victimSim = this.sim.get(closestId);
+      if (!victim || !victimSim) return;
+
+      const damage = headshot ? stats.damage * stats.headMultiplier : stats.damage;
+      victim.health = Math.max(0, victim.health - damage);
+
+      // Broadcast hit to shooter.
+      this.broadcast("hit", {
+        attackerId: sessionId,
+        victimId: closestId,
+        damage,
+        headshot,
+        newHealth: victim.health,
+      }, { except: [] });
+
+      // Broadcast damage to victim (for damage indicator).
+      this.broadcast("damage", {
+        targetId: closestId,
+        attackerId: sessionId,
+        attackerName: p.name,
+        amount: damage,
+        headshot,
+        newHealth: victim.health,
+      }, { except: [] });
+
+      // Kill check.
+      if (victim.health <= 0) {
+        victim.alive = false;
+        victimSim.alive = false;
+        victimSim.respawnAt = now + 3; // RESPAWN_DELAY = 3
+        victimSim.deaths++;
+        s.kills++;
+        p.kills = s.kills;
+        victim.deaths = victimSim.deaths;
+
+        // Update scores.
+        if (p.team === "blue") this.state.blueScore++;
+        else this.state.redScore++;
+
+        // Broadcast kill event.
+        this.broadcast("kill", {
+          killerId: sessionId,
+          killerName: p.name,
+          killerTeam: p.team,
+          victimId: closestId,
+          victimName: victim.name,
+          victimTeam: victim.team,
+          headshot,
+          weaponId: ASSAULT_RIFLE.id,
+        });
+      }
+    }
+  }
+
+  /** Ray-vs-capsule intersection. Returns hit info or null. */
+  private raycastPlayerCapsule(
+    origin: { x: number; y: number; z: number },
+    direction: { x: number; y: number; z: number },
+    target: PlayerStateSchema
+  ): { t: number; headshot: boolean } | null {
+    // Player capsule: center at (x, y + PLAYER_HEIGHT/2, z), radius PLAYER_RADIUS, height PLAYER_HEIGHT.
+    const cx = target.x;
+    const cz = target.z;
+
+    // Ray vs infinite cylinder along Y axis.
+    const ocx = origin.x - cx;
+    const ocz = origin.z - cz;
+    const a = direction.x * direction.x + direction.z * direction.z;
+    const b = 2 * (ocx * direction.x + ocz * direction.z);
+    const c = ocx * ocx + ocz * ocz - PLAYER_RADIUS * PLAYER_RADIUS;
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return null;
+
+    const sqrtDisc = Math.sqrt(disc);
+    let t = (-b - sqrtDisc) / (2 * a);
+    if (t < 0) t = (-b + sqrtDisc) / (2 * a);
+    if (t < 0 || t > 200) return null;
+
+    // Check Y bounds of capsule.
+    const hitY = origin.y + direction.y * t;
+    if (hitY < target.y || hitY > target.y + PLAYER_HEIGHT) return null;
+
+    // Headshot: hit above 85% of capsule height.
+    const headshot = hitY > target.y + PLAYER_HEIGHT * 0.85;
+    return { t, headshot };
   }
 
   private endMatch() {

@@ -37,3 +37,4 @@ Specs are numbered sequentially: `NNNN-<short-slug>.md` (e.g. `0001-tdm-rules.md
 | 0002 | [Architecture](./0002-architecture.md) | Implemented |
 | 0003 | [Networking Protocol](./0003-networking-protocol.md) | Implemented |
 | 0004 | [AI Rules & Contributing](./0004-ai-rules.md) | Implemented |
+| 0005 | [Combat](./0005-combat.md) | Implemented |

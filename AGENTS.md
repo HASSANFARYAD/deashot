@@ -72,6 +72,11 @@ All tests live alongside source in `*.test.ts` files and run via `vitest`.
 | Test | What it does |
 |---|---|
 | `scripts/test-colyseus.cjs` | Two Colyseus clients join the same room, verify player count ≥ 2 |
+| `apps/web/scripts/test-combat.cjs` | Two clients: one shoots the other, verifies server-authoritative damage, death, respawn (Phase 3) |
+| `apps/web/scripts/test-browser-gate.cjs` | Two browser tabs join, see each other, movement syncs (Phase 2, Playwright) |
+
+Phase 3 also references `specifications/0005-combat.md` and the execution guide at
+`docs/phase3-combat.md`.
 
 ### Manual smoke checklist (pre-merge for web changes)
 

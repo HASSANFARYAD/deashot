@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test:connect": "node scripts/test-colyseus.cjs",
+    "test:combat": "node scripts/test-combat.cjs",
     "test:browser": "node scripts/test-browser-gate.cjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/"

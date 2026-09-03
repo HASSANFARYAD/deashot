@@ -2,7 +2,9 @@
  * Integration test runner.
  * Phase 1: starts the game server, runs the two-client Colyseus join test.
  * Phase 2: builds + serves the web app, runs the Playwright browser gate test.
- * Exit code = 0 if both phases pass, 1 otherwise.
+ * Phase 3: server-authoritative combat test (damage, death, respawn via two
+ *          Colyseus clients).
+ * Exit code = 0 if all phases pass, 1 otherwise.
  */
 const { spawn, execSync } = require("child_process");
 const net = require("net");
@@ -11,6 +13,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const SERVER  = path.join(ROOT, "apps", "game-server", "dist", "index.js");
 const COLYSEUS_TEST = path.join(ROOT, "apps", "web", "scripts", "test-colyseus.cjs");
+const COMBAT_TEST   = path.join(ROOT, "apps", "web", "scripts", "test-combat.cjs");
 const BROWSER_TEST  = path.join(ROOT, "apps", "web", "scripts", "test-browser-gate.cjs");
 const WEB_DIST = path.join(ROOT, "apps", "web", "dist", "index.html");
 
@@ -59,6 +62,11 @@ async function main() {
     console.log("[integration] Running two-client Colyseus join test...");
     execSync(`node "${COLYSEUS_TEST}"`, { cwd: ROOT, stdio: "inherit" });
     console.log("[integration] Phase 1 PASSED\n");
+
+    // ===== Phase 3: server-authoritative combat test =====
+    console.log("[integration] Phase 3 — combat test (damage/death/respawn)");
+    execSync(`node "${COMBAT_TEST}"`, { cwd: ROOT, stdio: "inherit" });
+    console.log("[integration] Phase 3 PASSED\n");
 
     // ===== Phase 2: Playwright browser gate test =====
     console.log("[integration] Phase 2 — Playwright browser gate test");

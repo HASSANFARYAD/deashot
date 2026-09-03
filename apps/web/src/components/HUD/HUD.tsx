@@ -3,15 +3,24 @@ import type { GameState } from "../../game/GameEngine";
 import { Crosshair } from "./Crosshair";
 import { HealthBar } from "./HealthBar";
 import { AmmoDisplay } from "./AmmoDisplay";
+import { HitMarker } from "./HitMarker";
+import { DamageIndicator } from "./DamageIndicator";
+import { KillFeed } from "./KillFeed";
 
 interface HUDProps {
   state: GameState;
+  hitMarker: { active: boolean; headshot: boolean };
+  damageIndicator: { active: boolean; amount: number; headshot: boolean };
+  killFeed: Array<{ id: string; killer: string; killerTeam: string; victim: string; victimTeam: string; headshot: boolean; timestamp: number }>;
 }
 
-export const HUD: React.FC<HUDProps> = ({ state }) => {
+export const HUD: React.FC<HUDProps> = ({ state, hitMarker, damageIndicator, killFeed }) => {
   return (
     <>
       <Crosshair visible={state.crosshairVisible} />
+      <HitMarker visible={hitMarker.active} headshot={hitMarker.headshot} />
+      <DamageIndicator visible={damageIndicator.active} amount={damageIndicator.amount} headshot={damageIndicator.headshot} />
+      <KillFeed entries={killFeed} />
       <div style={styles.topLeft}>
         <HealthBar health={state.health} maxHealth={100} />
       </div>
