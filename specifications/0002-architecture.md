@@ -1,6 +1,6 @@
 # 0002 — Architecture
 
-**Status:** Implemented | **Version:** 1.0 | **Owner:** @HASSANFARYAD
+**Status:** Implemented | **Version:** 2.0 | **Owner:** @HASSANFARYAD
 
 ## Overview
 
@@ -17,8 +17,8 @@ receive authoritative snapshots and reconcile state.
 │   ├── game-server/    # Colyseus 0.15 authoritative server
 │   └── api/            # Fastify REST API (auth, health)
 ├── packages/
-│   ├── shared/         # Protocol types (PlayerInput, state schemas, constants)
-│   ├── game-config/    # Weapon + player physics tuning (source of truth)
+│   ├── shared/         # Protocol types (PlayerInput, MatchState, constants)
+│   ├── game-config/    # Weapon, player physics, and map/spawn config (source of truth)
 │   └── math/           # Pure math helpers (clamp, lerp, normalizeAngle)
 ├── scripts/            # Dev/CI scripts (integration runner, fixup)
 ├── specifications/     # Behavioural specs (this folder)
@@ -29,7 +29,8 @@ receive authoritative snapshots and reconcile state.
 
 - pnpm 11 workspaces (`pnpm-workspace.yaml`)
 - Turborepo orchestrates dev/build/typecheck/test across packages
-- `onlyBuiltDependencies: [esbuild, msgpackr-extract]` configured in `pnpm-workspace.yaml`
+- `allowBuilds: { esbuild: true, msgpackr-extract: true }` configured in
+  `pnpm-workspace.yaml` (pnpm 11 dropped `onlyBuiltDependencies`)
 
 ## Dual-build (ESM + CJS)
 
@@ -67,7 +68,9 @@ server.listen(2567);
 Room state uses `@colyseus/schema` `Schema` + `MapSchema` with decorators
 (`experimentalDecorators: true`, `useDefineForClassFields: false`).
 Simulation runs at 60 Hz via `setSimulationInterval`. Clients send `"input"`
-messages; server broadcasts `PlayerState` snapshots at 20 Hz.
+messages; the server simulates camera-relative movement (facing from `yaw`)
+and clamps positions to `MAP_BOUNDS`, broadcasting `PlayerState` schema at
+snapshot rate.
 
 ## Client architecture
 
@@ -76,21 +79,31 @@ messages; server broadcasts `PlayerState` snapshots at 20 Hz.
 1. `InputManager.poll()` — reads accumulated keyboard + pointer state
 2. `FPSCamera.handleInput()` — applies mouse look (yaw/pitch)
 3. `FPSCamera.updateAim()` — smooths FOV toward ADS value
-4. `PlayerController.update()` — integrates WASD movement with physics
-5. `Weapon.update()` — fire rate, hitscan ray, muzzle position, ADS gun position
-6. `Effects.update()` — particle lifetime management
-7. `renderer.render()` — Three.js render pass
+4. `PlayerController.update()` — integrates WASD movement with physics (prediction)
+5. `GameSocket.sendInput()` — pushes local input to the server (30 Hz) in online mode
+6. `Weapon.update()` — fire rate, hitscan ray, muzzle position, ADS gun position
+7. `RemotePlayers.updateFrame()` — interpolates remote players (online mode)
+8. `Effects.update()` — particle lifetime management
+9. `renderer.render()` — Three.js render pass
+
+In online mode a `GameSocket` wraps the Colyseus connection and exposes typed
+`SnapshotPlayer`/`MatchSnapshot` mirrors. `RemotePlayers` renders team-colored
+boxes for other sessions and lerps between buffered snapshots for smooth motion.
+The local player is predicted client-side and reconciled against the
+server-authoritative position when drift exceeds tolerance (0.5 m).
 
 The camera uses Euler order `"YXZ"`. Camera forward (horizontal) is
 `(-sin(yaw), -cos(yaw))`, which matches the standard three.js right-hand
-FPS convention.
+FPS convention. The server applies the same facing convention for movement so
+prediction lines up with authority.
 
 ## Test infrastructure
 
 - **Unit tests:** `vitest` in `packages/{math,shared,game-config}/src/*.test.ts`
 - **Integration:** `scripts/run-integration.cjs` starts the game server, runs
   `apps/web/scripts/test-colyseus.cjs` (two Colyseus clients join same room),
-  asserts player count ≥ 2 and same room ID
+  asserts same room ID, player count ≥ 2, and that a forward input changes a
+  player's server-side position (movement sync)
 - **CI:** GitHub Actions runs `typecheck → build → test:unit → test:integration`
 
 ## Type model (current)
@@ -103,4 +116,8 @@ TypeScript (no runtime dependency on `@colyseus/schema` for the wire format).
 
 **Changelog**
 
+- v2.0 — Phase 2: client prediction + reconciliation, `RemotePlayers`
+  interpolation, `GameSocket` networking wrapper, shared map/spawn config
+  (`MAP_BOUNDS`/`MAP_SPAWNS`), pnpm 11 `allowBuilds` note, movement-sync
+  integration assertion
 - v1.0 — Initial spec (Phase 0 + 1 architecture)

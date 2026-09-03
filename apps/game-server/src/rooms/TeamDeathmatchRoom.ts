@@ -8,6 +8,8 @@ import {
   PLAYER_FRICTION,
   PLAYER_JUMP_VELOCITY,
   GRAVITY,
+  MAP_SPAWNS,
+  MAP_BOUNDS,
 } from "@deashot/game-config";
 
 /** Syncable player state schema sent to all clients. */
@@ -64,20 +66,7 @@ interface PendingInput {
   reload: boolean;
 }
 
-const SPAWNS = {
-  blue: [
-    { x: -20, y: 0, z: 0 },
-    { x: -20, y: 0, z: 5 },
-    { x: -20, y: 0, z: -5 },
-    { x: -20, y: 0, z: 10 },
-  ],
-  red: [
-    { x: 20, y: 0, z: 0 },
-    { x: 20, y: 0, z: 5 },
-    { x: 20, y: 0, z: -5 },
-    { x: 20, y: 0, z: -10 },
-  ],
-};
+const SPAWNS = MAP_SPAWNS;
 
 export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
   maxClients = MAX_PLAYERS;
@@ -211,13 +200,31 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
 
       if (!input) continue;
 
-      // Movement (MVP world: axial, gravity along Y, ignores facing).
+      // Movement (camera-relative, matching the client prediction convention:
+      // forward = (-sin(yaw), -cos(yaw)), right = (cos(yaw), -sin(yaw))).
+      const yaw = s.yaw;
+      const camFwdX = -Math.sin(yaw);
+      const camFwdZ = -Math.cos(yaw);
       let moveX = 0;
       let moveZ = 0;
-      if (input.forward) moveZ -= 1;
-      if (input.backward) moveZ += 1;
-      if (input.left) moveX -= 1;
-      if (input.right) moveX += 1;
+      if (input.forward) {
+        moveX += camFwdX;
+        moveZ += camFwdZ;
+      }
+      if (input.backward) {
+        moveX -= camFwdX;
+        moveZ -= camFwdZ;
+      }
+      const rightX = -camFwdZ;
+      const rightZ = camFwdX;
+      if (input.right) {
+        moveX += rightX;
+        moveZ += rightZ;
+      }
+      if (input.left) {
+        moveX -= rightX;
+        moveZ -= rightZ;
+      }
 
       const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
       if (len > 0) {
@@ -250,6 +257,11 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
         p.y = 0;
         s.velY = 0;
       }
+
+      // Clamp to map bounds so authority matches client renderer.
+      const limit = MAP_BOUNDS.halfExtent;
+      p.x = Math.max(-limit, Math.min(limit, p.x));
+      p.z = Math.max(-limit, Math.min(limit, p.z));
     }
   }
 
