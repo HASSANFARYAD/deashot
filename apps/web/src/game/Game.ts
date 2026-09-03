@@ -1,7 +1,9 @@
 import { GameEngine } from "./GameEngine";
+import type { GameCallbacks } from "./GameEngine";
 import { GameSocket } from "./networking/GameSocket";
 
 export type { GameEngine, GameState, GameCallbacks } from "./GameEngine";
+export type { ServerHitEvent, ServerKillEvent, ServerDamageEvent } from "./networking/GameSocket";
 export { GameSocket } from "./networking/GameSocket";
 
 export interface CreateGameOptions {
@@ -16,7 +18,7 @@ export interface CreateGameOptions {
  */
 export function createGame(
   container: HTMLElement,
-  onStateChange?: (state: import("./GameEngine").GameState) => void,
+  callbacks: GameCallbacks = {},
   options: CreateGameOptions = {}
 ) {
   let socket: GameSocket | null = null;
@@ -26,7 +28,7 @@ export function createGame(
       console.error("Failed to join game server:", err);
     });
   }
-  const engine = new GameEngine(container, { onStateChange }, { socket: socket ?? undefined });
+  const engine = new GameEngine(container, callbacks, { socket: socket ?? undefined });
   return {
     dispose: () => engine.dispose(),
     getEngine: () => engine,

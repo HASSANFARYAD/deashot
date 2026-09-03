@@ -38,24 +38,3 @@ export interface MatchState {
   redScore: number;
   players: Record<string, PlayerState>;
 }
-
-export interface KillEvent {
-  killerId: string;
-  killerName: string;
-  victimId: string;
-  victimName: string;
-  weaponId: string;
-  headshot: boolean;
-  timestamp: number;
-}
-
-export interface DamageEvent {
-  targetId: string;
-  /** Normalized direction from victim to attacker, for damage indicator. */
-  directionX: number;
-  directionY: number;
-  directionZ: number;
-  amount: number;
-  newHealth: number;
-  killerId?: string;
-}

@@ -25,6 +25,8 @@ export interface SnapshotPlayer {
   health: number;
   kills: number;
   deaths: number;
+  ammo: number;
+  reloading: boolean;
 }
 
 export interface MatchSnapshot {
@@ -35,11 +37,42 @@ export interface MatchSnapshot {
   players: Record<string, SnapshotPlayer>;
 }
 
+export interface ServerHitEvent {
+  attackerId: string;
+  victimId: string;
+  damage: number;
+  headshot: boolean;
+  newHealth: number;
+}
+
+export interface ServerKillEvent {
+  killerId: string;
+  killerName: string;
+  killerTeam: string;
+  victimId: string;
+  victimName: string;
+  victimTeam: string;
+  headshot: boolean;
+  weaponId: string;
+}
+
+export interface ServerDamageEvent {
+  targetId: string;
+  attackerId: string;
+  attackerName: string;
+  amount: number;
+  headshot: boolean;
+  newHealth: number;
+}
+
 export interface GameSocketCallbacks {
   onSnapshot?: (snapshot: MatchSnapshot) => void;
   onPlayerAdd?: (player: SnapshotPlayer) => void;
   onPlayerChange?: (player: SnapshotPlayer) => void;
   onPlayerRemove?: (sessionId: string) => void;
+  onHit?: (event: ServerHitEvent) => void;
+  onKill?: (event: ServerKillEvent) => void;
+  onDamage?: (event: ServerDamageEvent) => void;
   onClose?: () => void;
 }
 
@@ -57,6 +90,8 @@ function readPlayer(p: any): SnapshotPlayer {
     health: p.health,
     kills: p.kills,
     deaths: p.deaths,
+    ammo: p.ammo,
+    reloading: p.reloading,
   };
 }
 
@@ -130,6 +165,17 @@ export class GameSocket {
     // Periodic snapshot to drive interpolation + reconciliation (50 Hz poll).
     this.snapshotTimer = setInterval(update, 1000 / 50);
 
+    // Listen for combat events.
+    this.room.onMessage("hit", (event: ServerHitEvent) => {
+      this.callbacks.onHit?.(event);
+    });
+    this.room.onMessage("kill", (event: ServerKillEvent) => {
+      this.callbacks.onKill?.(event);
+    });
+    this.room.onMessage("damage", (event: ServerDamageEvent) => {
+      this.callbacks.onDamage?.(event);
+    });
+
     this.room.onLeave(() => {
       if (this.inputTimer) clearInterval(this.inputTimer);
       if (this.snapshotTimer) clearInterval(this.snapshotTimer);
@@ -149,6 +195,12 @@ export class GameSocket {
   sendInput(input: Omit<PlayerInput, "sequence">) {
     this.sequence++;
     this.lastInput = { ...input, sequence: this.sequence };
+  }
+
+  /** Send a shoot event (muzzle origin + direction) to the server. */
+  sendShoot(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number) {
+    if (!this.room) return;
+    this.room.send("shoot", { ox, oy, oz, dx, dy, dz });
   }
 
   private flushInput() {

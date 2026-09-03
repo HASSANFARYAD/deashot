@@ -8,6 +8,11 @@ import { CollisionWorld } from "./systems/CollisionWorld";
 import { RemotePlayers } from "./systems/RemotePlayers";
 import { buildMap } from "./map/ArenaMap";
 import { GameSocket } from "./networking/GameSocket";
+import type {
+  ServerHitEvent,
+  ServerKillEvent,
+  ServerDamageEvent,
+} from "./networking/GameSocket";
 import { SERVER_SNAPSHOT_RATE } from "@deashot/shared";
 
 export interface GameState {
@@ -20,6 +25,9 @@ export interface GameState {
 
 export interface GameCallbacks {
   onStateChange?: (state: GameState) => void;
+  onHit?: (event: ServerHitEvent) => void;
+  onKill?: (event: ServerKillEvent) => void;
+  onDamage?: (event: ServerDamageEvent) => void;
 }
 
 /** Tolerance (metres) beyond which the local player snaps to server authority. */
@@ -49,6 +57,7 @@ export class GameEngine {
   private fpsTimer = 0;
   private stateInterval: ReturnType<typeof setInterval> | null = null;
   private onClick: (() => void) | null = null;
+  private serverSelf: { ammo: number; reloading: boolean; health: number } | null = null;
 
   constructor(
     container: HTMLElement,
@@ -157,6 +166,8 @@ export class GameEngine {
           this.player.position.set(self.x, self.y, self.z);
           this.camera.update(self.x, self.y, self.z);
         }
+        // Cache server-authoritative state for HUD.
+        this.serverSelf = { ammo: self.ammo, reloading: self.reloading, health: self.health };
       }
 
       // Drive remote players from the snapshot so they render reliably.
@@ -178,14 +189,27 @@ export class GameEngine {
     callbacks.onClose = () => {
       this.remote.clear();
     };
+
+    callbacks.onHit = (event) => {
+      this.callbacks.onHit?.(event);
+    };
+    callbacks.onKill = (event) => {
+      this.callbacks.onKill?.(event);
+    };
+    callbacks.onDamage = (event) => {
+      this.callbacks.onDamage?.(event);
+    };
   }
 
   private emitState() {
     const ws = this.weapon.getState();
+    const ammo = this.serverSelf?.ammo ?? ws.currentAmmo;
+    const reloading = this.serverSelf?.reloading ?? ws.reloading;
+    const health = this.serverSelf?.health ?? this.player.health;
     this.callbacks.onStateChange?.({
-      health: this.player.health,
-      ammo: ws.currentAmmo,
-      reloading: ws.reloading,
+      health,
+      ammo,
+      reloading,
       reloadProgress: ws.reloadProgress,
       crosshairVisible: this.input.pointerLocked,
     });
@@ -242,10 +266,18 @@ export class GameEngine {
       // Miss: nothing for now.
     });
 
-    // Visible tracer + muzzle flash for every shot.
+    // Visible tracer + muzzle flash for every shot + send to server.
     if (shot) {
       this.effects.tracer(shot.origin, shot.point);
       this.effects.muzzleFlash(shot.origin);
+
+      if (this.socket) {
+        const dir = shot.point.clone().sub(shot.origin).normalize();
+        this.socket.sendShoot(
+          shot.origin.x, shot.origin.y, shot.origin.z,
+          dir.x, dir.y, dir.z
+        );
+      }
     }
 
     // Remote players (interpolated from server snapshots).
