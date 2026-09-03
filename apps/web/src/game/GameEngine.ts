@@ -15,12 +15,31 @@ import type {
 } from "./networking/GameSocket";
 import { SERVER_SNAPSHOT_RATE } from "@deashot/shared";
 
+export interface ScoreboardEntry {
+  id: string;
+  name: string;
+  team: string;
+  kills: number;
+  deaths: number;
+  alive: boolean;
+}
+
 export interface GameState {
   health: number;
   ammo: number;
   reloading: boolean;
   reloadProgress: number;
   crosshairVisible: boolean;
+  /** Online match info (defaults when offline / not yet connected). */
+  phase: string;
+  timeRemaining: number;
+  blueScore: number;
+  redScore: number;
+  winner: string;
+  myId: string;
+  myTeam: string;
+  connected: boolean;
+  players: ScoreboardEntry[];
 }
 
 export interface GameCallbacks {
@@ -58,6 +77,17 @@ export class GameEngine {
   private stateInterval: ReturnType<typeof setInterval> | null = null;
   private onClick: (() => void) | null = null;
   private serverSelf: { ammo: number; reloading: boolean; health: number } | null = null;
+
+  private serverMatch: {
+    phase: string;
+    timeRemaining: number;
+    blueScore: number;
+    redScore: number;
+    winner: string;
+    myId: string;
+    myTeam: string;
+    players: ScoreboardEntry[];
+  } | null = null;
 
   constructor(
     container: HTMLElement,
@@ -170,6 +200,25 @@ export class GameEngine {
         this.serverSelf = { ammo: self.ammo, reloading: self.reloading, health: self.health };
       }
 
+      // Cache authoritative match/scoreboard info for the React HUD.
+      this.serverMatch = {
+        phase: snapshot.phase,
+        timeRemaining: snapshot.timeRemaining,
+        blueScore: snapshot.blueScore,
+        redScore: snapshot.redScore,
+        winner: snapshot.winner,
+        myId: socket.sessionId,
+        myTeam: self?.team ?? "",
+        players: Object.values(snapshot.players).map((p) => ({
+          id: p.id,
+          name: p.name,
+          team: p.team,
+          kills: p.kills,
+          deaths: p.deaths,
+          alive: p.alive,
+        })),
+      };
+
       // Drive remote players from the snapshot so they render reliably.
       const seen = new Set<string>();
       for (const sid in snapshot.players) {
@@ -206,12 +255,22 @@ export class GameEngine {
     const ammo = this.serverSelf?.ammo ?? ws.currentAmmo;
     const reloading = this.serverSelf?.reloading ?? ws.reloading;
     const health = this.serverSelf?.health ?? this.player.health;
+    const m = this.serverMatch;
     this.callbacks.onStateChange?.({
       health,
       ammo,
       reloading,
       reloadProgress: ws.reloadProgress,
       crosshairVisible: this.input.pointerLocked,
+      phase: m?.phase ?? "waiting",
+      timeRemaining: m?.timeRemaining ?? 0,
+      blueScore: m?.blueScore ?? 0,
+      redScore: m?.redScore ?? 0,
+      winner: m?.winner ?? "",
+      myId: m?.myId ?? "",
+      myTeam: m?.myTeam ?? "",
+      connected: this.socket?.connected ?? false,
+      players: m?.players ?? [],
     });
   }
 

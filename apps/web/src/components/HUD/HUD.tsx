@@ -14,6 +14,13 @@ interface HUDProps {
   killFeed: Array<{ id: string; killer: string; killerTeam: string; victim: string; victimTeam: string; headshot: boolean; timestamp: number }>;
 }
 
+function formatTime(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, "0")}`;
+}
+
 export const HUD: React.FC<HUDProps> = ({ state, hitMarker, damageIndicator, killFeed }) => {
   return (
     <>
@@ -21,6 +28,11 @@ export const HUD: React.FC<HUDProps> = ({ state, hitMarker, damageIndicator, kil
       <HitMarker visible={hitMarker.active} headshot={hitMarker.headshot} />
       <DamageIndicator visible={damageIndicator.active} amount={damageIndicator.amount} headshot={damageIndicator.headshot} />
       <KillFeed entries={killFeed} />
+      <div style={styles.topCenter}>
+        <span style={{ ...styles.teamScore, color: "#5599ff" }}>{state.blueScore}</span>
+        <span style={styles.timer}>{state.connected ? formatTime(state.timeRemaining) : "--:--"}</span>
+        <span style={{ ...styles.teamScore, color: "#ff5555" }}>{state.redScore}</span>
+      </div>
       <div style={styles.topLeft}>
         <HealthBar health={state.health} maxHealth={100} />
       </div>
@@ -48,5 +60,28 @@ const styles: Record<string, React.CSSProperties> = {
     bottom: 20,
     right: 20,
     zIndex: 100,
+  },
+  topCenter: {
+    position: "absolute",
+    top: 16,
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 100,
+    display: "flex",
+    alignItems: "center",
+    gap: 18,
+    background: "rgba(0,0,0,0.45)",
+    padding: "6px 16px",
+    borderRadius: 6,
+  },
+  teamScore: {
+    fontSize: 20,
+    fontWeight: "bold",
+    fontFamily: "monospace",
+  },
+  timer: {
+    fontSize: 18,
+    color: "#fff",
+    fontFamily: "monospace",
   },
 };

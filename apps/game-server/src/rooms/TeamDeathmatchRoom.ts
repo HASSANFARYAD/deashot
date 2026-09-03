@@ -1,6 +1,6 @@
 import { Client, Room } from "colyseus";
 import { Schema, MapSchema, type } from "@colyseus/schema";
-import { MAX_PLAYERS, MATCH_DURATION } from "@deashot/shared";
+import { MAX_PLAYERS, MATCH_DURATION, KILL_LIMIT } from "@deashot/shared";
 import {
   PLAYER_MAX_HEALTH,
   PLAYER_SPEED,
@@ -43,6 +43,7 @@ export class MatchStateSchema extends Schema {
   @type("number") timeRemaining: number = MATCH_DURATION;
   @type("number") blueScore: number = 0;
   @type("number") redScore: number = 0;
+  @type("string") winner: "blue" | "red" | "" = "";
   @type({ map: PlayerStateSchema }) players = new MapSchema<PlayerStateSchema>();
 }
 
@@ -82,10 +83,21 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
   private inputs = new Map<string, PendingInput>();
   private timeRemaining = MATCH_DURATION;
   private phase: "waiting" | "in-progress" | "ended" = "waiting";
+  private killLimit = KILL_LIMIT;
 
-  onCreate(_options: any) {
+  onCreate(options: any) {
     this.setState(new MatchStateSchema());
     this.state.id = `tdm-${this.roomId}`;
+
+    // Optional per-room overrides (e.g. for fast integration tests).
+    const opts = options ?? {};
+    this.killLimit = typeof opts.killLimit === "number" && opts.killLimit > 0
+      ? opts.killLimit
+      : KILL_LIMIT;
+    if (typeof opts.duration === "number" && opts.duration > 0) {
+      this.timeRemaining = opts.duration;
+      this.state.timeRemaining = opts.duration;
+    }
 
     this.setSimulationInterval((dt) => this.onTick(dt), 1000 / 60);
 
@@ -307,6 +319,7 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
     const s = this.sim.get(sessionId);
     if (!p || !s) return;
     if (!p.alive) return;
+    if (this.phase !== "in-progress") return;
 
     const now = Date.now() / 1000;
     const stats = ASSAULT_RIFLE.stats;
@@ -409,6 +422,14 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
           headshot,
           weaponId: ASSAULT_RIFLE.id,
         });
+
+        // Win by kill limit.
+        if (
+          this.state.blueScore >= this.killLimit ||
+          this.state.redScore >= this.killLimit
+        ) {
+          this.endMatch();
+        }
       }
     }
   }
@@ -449,7 +470,12 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
   private endMatch() {
     this.phase = "ended";
     this.state.phase = "ended";
+    let winner: "blue" | "red" | "" = "";
+    if (this.state.blueScore > this.state.redScore) winner = "blue";
+    else if (this.state.redScore > this.state.blueScore) winner = "red";
+    this.state.winner = winner;
     this.broadcast("match-ended", {
+      winner,
       blueScore: this.state.blueScore,
       redScore: this.state.redScore,
     });

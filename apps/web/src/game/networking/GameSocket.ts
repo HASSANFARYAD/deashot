@@ -34,6 +34,7 @@ export interface MatchSnapshot {
   timeRemaining: number;
   blueScore: number;
   redScore: number;
+  winner: string;
   players: Record<string, SnapshotPlayer>;
 }
 
@@ -107,6 +108,7 @@ export class GameSocket {
     timeRemaining: 0,
     blueScore: 0,
     redScore: 0,
+    winner: "",
     players: {},
   };
   private snapshotTimer: ReturnType<typeof setTimeout> | null = null;
@@ -151,6 +153,7 @@ export class GameSocket {
         timeRemaining: state.timeRemaining,
         blueScore: state.blueScore,
         redScore: state.redScore,
+        winner: state.winner ?? "",
         players: { ...players },
       };
       this.callbacks.onSnapshot?.(this.mirror);
