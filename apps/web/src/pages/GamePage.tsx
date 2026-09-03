@@ -4,6 +4,8 @@ import type { ServerHitEvent, ServerKillEvent, ServerDamageEvent } from "../game
 import { createGame } from "../game/Game";
 import { HUD } from "../components/HUD/HUD";
 import { PointerPrompt } from "../components/HUD/PointerPrompt";
+import { Scoreboard } from "../components/HUD/Scoreboard";
+import { MatchEnd } from "../components/HUD/MatchEnd";
 
 interface GamePageProps {
   onExit: () => void;
@@ -13,14 +15,25 @@ interface GamePageProps {
 export function GamePage({ onExit, online = false }: GamePageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<{ dispose: () => void } | null>(null);
+  const [playSession, setPlaySession] = useState(0);
   const [gameState, setGameState] = useState<GameState>({
     health: 100,
     ammo: 30,
     reloading: false,
     reloadProgress: 0,
     crosshairVisible: false,
+    phase: "waiting",
+    timeRemaining: 0,
+    blueScore: 0,
+    redScore: 0,
+    winner: "",
+    myId: "",
+    myTeam: "",
+    connected: false,
+    players: [],
   });
   const [pointerLocked, setPointerLocked] = useState(false);
+  const [scoreboardOpen, setScoreboardOpen] = useState(false);
   const [hitMarker, setHitMarker] = useState<{ active: boolean; headshot: boolean }>({ active: false, headshot: false });
   const [damageIndicator, setDamageIndicator] = useState<{ active: boolean; amount: number; headshot: boolean }>({ active: false, amount: 0, headshot: false });
   const [killFeed, setKillFeed] = useState<Array<{ id: string; killer: string; killerTeam: string; victim: string; victimTeam: string; headshot: boolean; timestamp: number }>>([]);
@@ -79,7 +92,15 @@ export function GamePage({ onExit, online = false }: GamePageProps) {
       game.dispose();
       engineRef.current = null;
     };
-  }, [online, handleHit, handleKill, handleDamage]);
+  }, [online, handleHit, handleKill, handleDamage, playSession]);
+
+  const handlePlayAgain = useCallback(() => {
+    setKillFeed([]);
+    setHitMarker({ active: false, headshot: false });
+    setDamageIndicator({ active: false, amount: 0, headshot: false });
+    setScoreboardOpen(false);
+    setPlaySession((s) => s + 1);
+  }, []);
 
   // Clean up old kill feed entries.
   useEffect(() => {
@@ -90,10 +111,50 @@ export function GamePage({ onExit, online = false }: GamePageProps) {
     return () => clearTimeout(timer);
   }, [killFeed]);
 
+  // Tab toggles the scoreboard.
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        setScoreboardOpen(true);
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === "Tab") setScoreboardOpen(false);
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
+
   return (
     <div style={styles.root}>
       <div ref={containerRef} style={styles.canvas} />
       <HUD state={gameState} hitMarker={hitMarker} damageIndicator={damageIndicator} killFeed={killFeed} />
+      {gameState.connected && (
+        <Scoreboard
+          visible={scoreboardOpen && gameState.phase !== "ended"}
+          players={gameState.players}
+          blueScore={gameState.blueScore}
+          redScore={gameState.redScore}
+          timeRemaining={gameState.timeRemaining}
+          myId={gameState.myId}
+        />
+      )}
+      {gameState.connected && gameState.phase === "ended" && (
+        <MatchEnd
+          winner={gameState.winner}
+          blueScore={gameState.blueScore}
+          redScore={gameState.redScore}
+          players={gameState.players}
+          myId={gameState.myId}
+          onPlayAgain={handlePlayAgain}
+          onHome={onExit}
+        />
+      )}
       <PointerPrompt visible={pointerLocked} />
       <div style={styles.topRight}>
         <button onClick={onExit} style={styles.exitBtn}>

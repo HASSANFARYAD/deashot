@@ -36,5 +36,7 @@ export interface MatchState {
   blueScore: number;
   /** Red team total kills. */
   redScore: number;
+  /** Winning team, or null while the match is ongoing or tied. */
+  winner: Team | null;
   players: Record<string, PlayerState>;
 }
