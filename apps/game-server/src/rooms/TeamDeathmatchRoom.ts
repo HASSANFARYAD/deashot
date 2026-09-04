@@ -152,8 +152,8 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
         left: !!input.left,
         right: !!input.right,
         jump: !!input.jump,
-        yaw: isFinite(input.yaw) ? input.yaw : 0,
-        pitch: isFinite(input.pitch) ? input.pitch : 0,
+        yaw: Number.isFinite(input.yaw) ? input.yaw : 0,
+        pitch: Number.isFinite(input.pitch) ? input.pitch : 0,
         shoot: !!input.shoot,
         reload: !!input.reload,
       });

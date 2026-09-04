@@ -14,7 +14,7 @@
 const { chromium } = require("playwright");
 
 const PORT = Number(process.argv.find((_, i, a) => a[i - 1] === "--port") || 4173);
-const URL = `http://localhost:${PORT}`;
+const APP_URL = `http://localhost:${PORT}`;
 const MAX_WAIT_MS = 30_000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -72,8 +72,8 @@ async function main() {
   const pageB = await context.newPage();
 
   console.log("[browser-test] Opening both tabs...");
-  await pageA.goto(URL, { waitUntil: "domcontentloaded" });
-  await pageB.goto(URL, { waitUntil: "domcontentloaded" });
+  await pageA.goto(APP_URL, { waitUntil: "domcontentloaded" });
+  await pageB.goto(APP_URL, { waitUntil: "domcontentloaded" });
 
   // Click PLAY on both.
   await pageA.click("text=PLAY");
@@ -135,7 +135,7 @@ async function main() {
 
   const bAfter = (await getEngineInfo(pageB))?.local;
   const aRemotesAfter = (await getEngineInfo(pageA))?.remote;
-  const { entry: aViewOfBAfter, dist } = closestEntry(aRemotesAfter, bStart);
+  const { entry: aViewOfBAfter } = closestEntry(aRemotesAfter, bStart);
 
   if (!bAfter || !aViewOfBAfter) {
     console.log("[browser-test] FAIL — lost remote entry after movement");

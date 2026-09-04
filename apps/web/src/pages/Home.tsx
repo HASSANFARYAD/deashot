@@ -18,7 +18,7 @@ export function Home({ onPlay }: HomeProps) {
       const name = username.trim();
       const res = await guestLogin(name || undefined);
       onPlay(res.token);
-    } catch (e) {
+    } catch {
       setError("Could not reach the server. Is it running?");
       setBusy(false);
     }

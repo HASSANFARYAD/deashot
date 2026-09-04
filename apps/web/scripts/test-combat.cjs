@@ -14,24 +14,6 @@ const { Client } = require("colyseus.js");
 const SERVER = "ws://localhost:2567";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function findPlayer(room) {
-  const state = room.state;
-  if (!state.players) return null;
-  for (const [sid, p] of state.players) {
-    return { sid, p };
-  }
-  return null;
-}
-
-function getPlayerByTeam(room, team) {
-  const state = room.state;
-  if (!state.players) return null;
-  for (const [sid, p] of state.players) {
-    if (p.team === team) return { sid, p };
-  }
-  return null;
-}
-
 function allPlayers(room) {
   const out = {};
   const state = room.state;

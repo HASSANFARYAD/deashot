@@ -12,8 +12,7 @@
     "test:match": "node scripts/test-match-end.cjs",
     "test:warmup": "node scripts/test-warmup.cjs",
     "test:browser": "node scripts/test-browser-gate.cjs",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@deashot/game-config": "workspace:*",
