@@ -1,7 +1,6 @@
 import * as THREE from "three";
-import { ASSAULT_RIFLE } from "@deashot/game-config";
+import { ASSAULT_RIFLE, MAP_COLLIDERS } from "@deashot/game-config";
 import type { FPSCamera } from "./FPSCamera";
-import type { CollisionWorld } from "./CollisionWorld";
 import type { InputState } from "./InputManager";
 
 export interface WeaponState {
@@ -98,7 +97,6 @@ export class Weapon {
     input: InputState,
     dt: number,
     _camera: FPSCamera,
-    collision: CollisionWorld,
     onHit: (point: THREE.Vector3, normal: THREE.Vector3) => void,
     _onMiss: (point: THREE.Vector3) => void
   ): { type: "shoot"; origin: THREE.Vector3; point: THREE.Vector3 } | null {
@@ -159,10 +157,10 @@ export class Weapon {
       muzzleWorld.applyQuaternion(_camera.camera.quaternion);
       muzzleWorld.add(_camera.camera.position);
 
-      // Test against all colliders (simplified: ground + box AABB).
+      // Test against ground + all world colliders, keep nearest hit.
       const hitPoint = new THREE.Vector3();
       const hitNormal = new THREE.Vector3(0, 1, 0);
-      const hit = this.raycast(ray, collision, hitPoint, hitNormal);
+      const hit = this.raycast(ray, hitPoint, hitNormal);
 
       if (hit) {
         onHit(hitPoint, hitNormal);
@@ -196,52 +194,51 @@ export class Weapon {
 
   private raycast(
     ray: THREE.Ray,
-    collision: CollisionWorld,
     hitPoint: THREE.Vector3,
     hitNormal: THREE.Vector3
   ): boolean {
-    // Test ground plane (y=0).
-    if (ray.direction.y < 0) {
-      const t = -ray.origin.y / ray.direction.y;
-      if (t > 0 && t < 200) {
-        hitPoint.copy(ray.origin).addScaledVector(ray.direction, t);
-        hitNormal.set(0, 1, 0);
-        return true;
-      }
-    }
-
-    // Test each AABB in the collision world.
+    let bestT = Infinity;
+    let found = false;
+    const tempBox = new THREE.Box3();
     const result = new THREE.Vector3();
     const normal = new THREE.Vector3();
-    const tempBox = new THREE.Box3();
 
-    for (const mesh of (collision as any).colliders || []) {
-      tempBox.min.set(mesh.minX, mesh.minY, mesh.minZ);
-      tempBox.max.set(mesh.maxX, mesh.maxY, mesh.maxZ);
-      if (ray.intersectBox(tempBox, result)) {
-        // Compute face normal.
-        const cx = (mesh.minX + mesh.maxX) / 2;
-        const cy = (mesh.minY + mesh.maxY) / 2;
-        const cz = (mesh.minZ + mesh.maxZ) / 2;
-        const dx = result.x - cx;
-        const dy = result.y - cy;
-        const dz = result.z - cz;
-        const hw = (mesh.maxX - mesh.minX) / 2;
-        const hh = (mesh.maxY - mesh.minY) / 2;
-        const hd = (mesh.maxZ - mesh.minZ) / 2;
-        const nx = Math.abs(dx) / hw;
-        const ny = Math.abs(dy) / hh;
-        const nz = Math.abs(dz) / hd;
-        if (ny > nx && ny > nz) normal.set(0, Math.sign(dy), 0);
-        else if (nx > nz) normal.set(Math.sign(dx), 0, 0);
-        else normal.set(0, 0, Math.sign(dz));
-
-        hitPoint.copy(result);
-        hitNormal.copy(normal);
-        return true;
+    // Test ground plane (y = 0).
+    if (ray.direction.y < 0) {
+      const t = -ray.origin.y / ray.direction.y;
+      if (t > 0 && t < bestT) {
+        bestT = t;
+        hitPoint.copy(ray.origin).addScaledVector(ray.direction, t);
+        hitNormal.set(0, 1, 0);
+        found = true;
       }
     }
 
-    return false;
+    // Test every world collider, keep the nearest hit.
+    for (const c of MAP_COLLIDERS) {
+      tempBox.min.set(c.cx - c.hw, c.cy - c.hh, c.cz - c.hd);
+      tempBox.max.set(c.cx + c.hw, c.cy + c.hh, c.cz + c.hd);
+      if (ray.intersectBox(tempBox, result)) {
+        const t = ray.origin.distanceTo(result);
+        if (t < bestT) {
+          bestT = t;
+          hitPoint.copy(result);
+          // Compute face normal from hit point relative to box centre.
+          const dx = result.x - c.cx;
+          const dy = result.y - c.cy;
+          const dz = result.z - c.cz;
+          const adx = Math.abs(dx) / c.hw;
+          const ady = Math.abs(dy) / c.hh;
+          const adz = Math.abs(dz) / c.hd;
+          if (adx >= ady && adx >= adz) normal.set(Math.sign(dx), 0, 0);
+          else if (ady >= adz) normal.set(0, Math.sign(dy), 0);
+          else normal.set(0, 0, Math.sign(dz));
+          hitNormal.copy(normal);
+          found = true;
+        }
+      }
+    }
+
+    return found;
   }
 }
