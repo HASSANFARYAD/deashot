@@ -21,7 +21,6 @@ const COMBAT_TEST   = path.join(ROOT, "apps", "web", "scripts", "test-combat.cjs
 const MATCH_END_TEST = path.join(ROOT, "apps", "web", "scripts", "test-match-end.cjs");
 const WARMUP_TEST = path.join(ROOT, "apps", "web", "scripts", "test-warmup.cjs");
 const BROWSER_TEST  = path.join(ROOT, "apps", "web", "scripts", "test-browser-gate.cjs");
-const WEB_DIST = path.join(ROOT, "apps", "web", "dist", "index.html");
 
 const SERVER_PORT = 2567;
 const API_PORT    = 4000;

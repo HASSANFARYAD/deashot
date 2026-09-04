@@ -121,9 +121,6 @@ async function run() {
     attempts++;
 
     const st = roomA.state;
-    // Re-read the player each loop (alive flag drives whether we need to wait).
-    const victim = getPlayer(roomA, enemySid);
-    const shooter = getPlayer(roomA, aSid);
 
     // Log score changes but don't spam.
     if (st.blueScore !== lastScore) {

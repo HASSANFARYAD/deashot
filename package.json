@@ -7,15 +7,25 @@
     "dev:server": "turbo dev --filter=game-server",
     "dev:api": "turbo dev --filter=api",
     "build": "turbo build",
-    "lint": "turbo lint",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:unit": "turbo test",
     "test:integration": "node scripts/run-integration.cjs"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^15.15.0",
     "turbo": "^2.5.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.69.0"
   },
-  "packageManager": "pnpm@11.9.0"
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=11"
+  }
 }

@@ -97,12 +97,13 @@ Phases reference their specs and execution guides: Phase 3 → `specifications/0
 Defined in `.github/workflows/ci.yml`. Runs on every push to `main` and every PR to `main`.
 
 ```
-install → typecheck → build → unit tests → integration test
+install → lint → typecheck → build → unit tests → integration test
 ```
 
 | Step | Command | Purpose |
 |---|---|---|
 | Install | `pnpm install --frozen-lockfile` | Reproducible deps |
+| Lint | `pnpm lint` | ESLint flat config across the whole monorepo |
 | Typecheck | `pnpm typecheck` | Catch type errors early |
 | Build | `pnpm build` | Compile all packages + apps |
 | Unit tests | `pnpm test:unit` | Math, protocol, config correctness |
@@ -116,6 +117,11 @@ Concurrency is enabled: only one CI run per branch at a time; earlier runs cance
 - Monorepo packages compile dual ESM + CJS. Game server and API run as CJS via `node dist`.
 - Three.js: use `Euler(..., "YXZ")` for FPS cameras. Forward is `(-sin(yaw), -cos(yaw))`.
 - New constants go in `packages/game-config` (player/weapons) or `packages/shared` (protocol).
+- Lint config is a single flat `eslint.config.mjs` at the repo root covering every
+  workspace; `pnpm lint` runs it in one pass. Type-aware rules are deliberately off
+  because `pnpm typecheck` already runs `tsc --noEmit` over every package.
+- Never use the global `isFinite`/`isNaN` — they coerce their argument, so
+  `isFinite("5")` is `true`. Use `Number.isFinite`/`Number.isNaN` (lint-enforced).
 - React components: functional only, TypeScript props interfaces, no comments unless non-obvious.
 - Formatting: 2-space indent, no semicolons enforced by editor (consistent across files).
 
