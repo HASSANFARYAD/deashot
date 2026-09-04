@@ -99,10 +99,14 @@ async function run() {
   const roomA = await clientA.joinOrCreate("tdm", {
     warmupPlayers: 1,
     warmupSeconds: 1,
+    _spawnA: { x: -5, y: 0, z: 25 },
+    _spawnB: { x: 5, y: 0, z: 25 },
   });
   const roomB = await clientB.joinOrCreate("tdm", {
     warmupPlayers: 1,
     warmupSeconds: 1,
+    _spawnA: { x: -5, y: 0, z: 25 },
+    _spawnB: { x: 5, y: 0, z: 25 },
   });
 
   for (const room of [roomA, roomB]) {

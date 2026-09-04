@@ -45,12 +45,16 @@ async function run() {
     duration: 30,
     warmupPlayers: 1,
     warmupSeconds: 1,
+    _spawnA: { x: -5, y: 0, z: 25 },
+    _spawnB: { x: 5, y: 0, z: 25 },
   });
   const roomB = await clientB.joinOrCreate("tdm", {
     killLimit: KILL_LIMIT,
     duration: 30,
     warmupPlayers: 1,
     warmupSeconds: 1,
+    _spawnA: { x: -5, y: 0, z: 25 },
+    _spawnB: { x: 5, y: 0, z: 25 },
   });
 
   // Register noop combat listeners to keep colyseus.js quiet.

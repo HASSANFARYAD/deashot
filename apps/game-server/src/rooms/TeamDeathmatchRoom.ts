@@ -10,7 +10,7 @@ import {
   PLAYER_JUMP_VELOCITY,
   GRAVITY,
   MAP_SPAWNS,
-  MAP_BOUNDS,
+  MAP_COLLIDERS,
   ASSAULT_RIFLE,
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
@@ -18,6 +18,9 @@ import {
   PITCH_LIMIT,
   SHOT_AIM_TOLERANCE,
   SHOT_ORIGIN_TOLERANCE,
+  raycastAABB,
+  resolveAABB,
+  type SpawnPoint,
 } from "@deashot/game-config";
 import { clamp, normalizeAngle, lookVectorFromYawPitch } from "@deashot/math";
 import { ALLOW_TEST_ROOM_OPTIONS, JWT_SECRET, REQUIRE_AUTH } from "../config";
@@ -141,6 +144,8 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
   private countdownRunning = false;
   private countdown = 0;
   private countdownLastWhole = -1;
+  private testSpawnA: SpawnPoint | null = null;
+  private testSpawnB: SpawnPoint | null = null;
 
   onCreate(options: any) {
     this.setState(new MatchStateSchema());
@@ -163,6 +168,12 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
     }
     if (typeof opts.warmupSeconds === "number" && opts.warmupSeconds >= 1) {
       this.warmupSeconds = opts.warmupSeconds;
+    }
+    if (ALLOW_TEST_ROOM_OPTIONS && opts._spawnA && typeof opts._spawnA === "object") {
+      this.testSpawnA = { x: opts._spawnA.x ?? 0, y: opts._spawnA.y ?? 0, z: opts._spawnA.z ?? 0 };
+    }
+    if (ALLOW_TEST_ROOM_OPTIONS && opts._spawnB && typeof opts._spawnB === "object") {
+      this.testSpawnB = { x: opts._spawnB.x ?? 0, y: opts._spawnB.y ?? 0, z: opts._spawnB.z ?? 0 };
     }
 
     this.setSimulationInterval((dt) => this.onTick(dt), 1000 / 60);
@@ -202,7 +213,8 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
     const blueCount = this.playerCountOf("blue");
     const redCount = this.playerCountOf("red");
     const team: "blue" | "red" = blueCount <= redCount ? "blue" : "red";
-    const spawn = SPAWNS[team][blueCount % SPAWNS[team].length];
+    const override = team === "blue" ? this.testSpawnA : this.testSpawnB;
+    const spawn = override ?? SPAWNS[team][blueCount % SPAWNS[team].length];
 
     const p = new PlayerStateSchema();
     p.id = client.sessionId;
@@ -360,7 +372,8 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
           p.ammo = ASSAULT_RIFLE.stats.magazineSize;
           p.reloading = false;
           s.reloadTimer = 0;
-          const spawn = SPAWNS[p.team as "blue" | "red"][s.deaths % (SPAWNS[p.team as "blue" | "red"].length)];
+          const respawnOverride = (p.team === "blue" ? this.testSpawnA : this.testSpawnB);
+          const spawn = respawnOverride ?? SPAWNS[p.team as "blue" | "red"][s.deaths % (SPAWNS[p.team as "blue" | "red"].length)];
           p.x = spawn.x;
           p.y = spawn.y;
           p.z = spawn.z;
@@ -441,15 +454,16 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
       p.y += s.velY * h;
       p.z += s.velZ * h;
 
-      if (p.y < 0) {
-        p.y = 0;
+      // Resolve against world geometry (ground + cover + walls + bounds).
+      const resolved = resolveAABB(p.x, p.y, p.z, PLAYER_RADIUS, PLAYER_HEIGHT, MAP_COLLIDERS);
+      p.x = resolved.x;
+      p.y = resolved.y;
+      p.z = resolved.z;
+
+      // Ground collision stops vertical velocity.
+      if (p.y <= 0) {
         s.velY = 0;
       }
-
-      // Clamp to map bounds so authority matches client renderer.
-      const limit = MAP_BOUNDS.halfExtent;
-      p.x = Math.max(-limit, Math.min(limit, p.x));
-      p.z = Math.max(-limit, Math.min(limit, p.z));
     }
   }
 
@@ -518,7 +532,21 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
       );
     }
 
-    let closestT = stats.range;
+    // Wall occlusion: raycast against all world geometry first. Any player
+    // hit that sits farther than the nearest wall/cover hit is blocked.
+    let tWall = stats.range;
+    for (const collider of MAP_COLLIDERS) {
+      const wallHit = raycastAABB(
+        origin.x, origin.y, origin.z,
+        direction.x, direction.y, direction.z,
+        collider
+      );
+      if (wallHit && wallHit.t < tWall) {
+        tWall = wallHit.t;
+      }
+    }
+
+    let closestT = tWall;
     let closestId: string | null = null;
     let headshot = false;
 

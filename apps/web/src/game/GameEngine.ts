@@ -323,7 +323,7 @@ export class GameEngine {
     }
 
     // Weapon.
-    const shot = this.weapon.update(input, dt, this.camera, this.collision, (point, normal) => {
+    const shot = this.weapon.update(input, dt, this.camera, (point, normal) => {
       this.effects.bulletImpact(point, normal);
     }, () => {
       // Miss: nothing for now.
