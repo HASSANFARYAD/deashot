@@ -60,6 +60,9 @@ importers:
       '@deashot/game-config':
         specifier: workspace:*
         version: link:../../packages/game-config
+      '@deashot/math':
+        specifier: workspace:*
+        version: link:../../packages/math
       '@deashot/shared':
         specifier: workspace:*
         version: link:../../packages/shared

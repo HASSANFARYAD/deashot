@@ -116,7 +116,25 @@ async function run() {
   let lastScore = null;
   while (attempts < 400) {
     const shot = aim();
-    if (shot) roomA.send("shoot", shot);
+    if (shot) {
+      // The server rejects shots whose direction disagrees with the facing it
+      // last accepted from this client (spec 0005 v1.1), so report the facing
+      // first and give the simulation a tick to apply it, exactly as a real
+      // client streaming input at 30 Hz would.
+      roomA.send("input", {
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        jump: false,
+        yaw: Math.atan2(-shot.dx, -shot.dz),
+        pitch: Math.asin(shot.dy),
+        shoot: false,
+        reload: false,
+      });
+      await sleep(40);
+      roomA.send("shoot", shot);
+    }
     await sleep(120);
     attempts++;
 

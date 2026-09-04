@@ -130,6 +130,27 @@ async function run() {
     `[combat-test] Shooter at (${ox.toFixed(2)}, ${oy.toFixed(2)}, ${oz.toFixed(2)}) | Victim at (${tx.toFixed(2)}, ${ty.toFixed(2)}, ${tz.toFixed(2)}) | team=${myTeam} vs ${enemyTeam}`
   );
 
+  // The server only accepts shots whose direction matches the yaw/pitch it last
+  // received from this client (spec 0005 v1.1), so report the facing a real
+  // client would be sending at 30 Hz while aiming here.
+  const dirLen = Math.hypot(dx, dy, dz);
+  const faceTarget = async () => {
+    roomA.send("input", {
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+      jump: false,
+      yaw: Math.atan2(-dx, -dz),
+      pitch: Math.asin(dy / dirLen),
+      shoot: false,
+      reload: false,
+    });
+    // Let at least one 60 Hz tick apply it.
+    await sleep(120);
+  };
+  await faceTarget();
+
   // Check victim's starting health.
   const startHealth = victimStart.health;
   console.log(`[combat-test] Victim start health: ${startHealth}`);
@@ -160,6 +181,7 @@ async function run() {
 
   // -------- Death + respawn --------
   // If not already dead, keep firing until the victim dies.
+  await faceTarget();
   let loops = 0;
   while (loops < 30) {
     const victimNow = getPlayer(roomA, enemySid);

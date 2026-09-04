@@ -14,7 +14,12 @@ import {
   ASSAULT_RIFLE,
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
+  EYE_HEIGHT,
+  PITCH_LIMIT,
+  SHOT_AIM_TOLERANCE,
+  SHOT_ORIGIN_TOLERANCE,
 } from "@deashot/game-config";
+import { clamp, normalizeAngle, lookVectorFromYawPitch } from "@deashot/math";
 
 /** Syncable player state schema sent to all clients. */
 export class PlayerStateSchema extends Schema {
@@ -152,8 +157,13 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
         left: !!input.left,
         right: !!input.right,
         jump: !!input.jump,
-        yaw: Number.isFinite(input.yaw) ? input.yaw : 0,
-        pitch: Number.isFinite(input.pitch) ? input.pitch : 0,
+        // Normalize and clamp rather than trusting the wire. Pitch beyond
+        // PITCH_LIMIT is not reachable by a legitimate client and would let a
+        // modified one aim outside the camera's range.
+        yaw: Number.isFinite(input.yaw) ? normalizeAngle(input.yaw) : 0,
+        pitch: Number.isFinite(input.pitch)
+          ? clamp(input.pitch, -PITCH_LIMIT, PITCH_LIMIT)
+          : 0,
         shoot: !!input.shoot,
         reload: !!input.reload,
       });
@@ -423,14 +433,38 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
 
     // Normalize direction.
     const len = Math.sqrt(msg.dx * msg.dx + msg.dy * msg.dy + msg.dz * msg.dz);
-    if (len < 0.001) return;
+    if (!Number.isFinite(len) || len < 0.001) return;
     const dx = msg.dx / len;
     const dy = msg.dy / len;
     const dz = msg.dz / len;
 
-    // Hitscan raycast against all alive players.
-    const origin = { x: msg.ox, y: msg.oy, z: msg.oz };
+    // The client's claimed direction must be consistent with the yaw/pitch the
+    // server last accepted from this same client. Without this a modified
+    // client can fire at a target it is not facing.
+    const [lx, ly, lz] = lookVectorFromYawPitch(s.yaw, s.pitch);
+    if (lx * dx + ly * dy + lz * dz < Math.cos(SHOT_AIM_TOLERANCE)) return;
+
+    // Reconstruct the muzzle origin from authoritative state. The client sends
+    // its own origin, but it is never used for hit detection: trusting it lets
+    // a modified client place the ray beside any enemy's head and guarantee a
+    // headshot from anywhere on the map.
+    const origin = { x: p.x, y: p.y + EYE_HEIGHT, z: p.z };
     const direction = { x: dx, y: dy, z: dz };
+
+    // The reported origin is telemetry only — a large gap means the client is
+    // lying about where it is standing, or is badly desynced.
+    const odx = msg.ox - origin.x;
+    const ody = msg.oy - origin.y;
+    const odz = msg.oz - origin.z;
+    if (
+      Math.sqrt(odx * odx + ody * ody + odz * odz) > SHOT_ORIGIN_TOLERANCE
+    ) {
+      console.warn(
+        `[tdm ${this.roomId}] shot origin mismatch for ${sessionId} ` +
+          `(claimed ${msg.ox.toFixed(1)},${msg.oy.toFixed(1)},${msg.oz.toFixed(1)}; ` +
+          `server ${origin.x.toFixed(1)},${origin.y.toFixed(1)},${origin.z.toFixed(1)})`
+      );
+    }
 
     let closestT = stats.range;
     let closestId: string | null = null;
@@ -528,6 +562,12 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
     const ocx = origin.x - cx;
     const ocz = origin.z - cz;
     const a = direction.x * direction.x + direction.z * direction.z;
+    // A perfectly vertical shot has no horizontal component, so the quadratic
+    // degenerates and every subsequent term is NaN. NaN fails no comparison,
+    // so without this guard the function returned a NaN hit that silently
+    // poisoned the closest-hit search.
+    if (a < 1e-9) return null;
+
     const b = 2 * (ocx * direction.x + ocz * direction.z);
     const c = ocx * ocx + ocz * ocz - PLAYER_RADIUS * PLAYER_RADIUS;
     const disc = b * b - 4 * a * c;
@@ -536,7 +576,7 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
     const sqrtDisc = Math.sqrt(disc);
     let t = (-b - sqrtDisc) / (2 * a);
     if (t < 0) t = (-b + sqrtDisc) / (2 * a);
-    if (t < 0 || t > 200) return null;
+    if (t < 0 || t > ASSAULT_RIFLE.stats.range) return null;
 
     // Check Y bounds of capsule.
     const hitY = origin.y + direction.y * t;
