@@ -1,5 +1,6 @@
 import { Client, Room } from "colyseus";
 import { Schema, MapSchema, type } from "@colyseus/schema";
+import jwt from "jsonwebtoken";
 import { MAX_PLAYERS, MATCH_DURATION, KILL_LIMIT } from "@deashot/shared";
 import {
   PLAYER_MAX_HEALTH,
@@ -39,8 +40,9 @@ export class MatchStateSchema extends Schema {
   @type("string") id: string = "";
   @type("string") mode: string = "tdm";
   @type("string") map: string = "arena";
-  @type("string") phase: "waiting" | "in-progress" | "ended" = "waiting";
+  @type("string") phase: "waiting" | "warmup" | "in-progress" | "ended" = "waiting";
   @type("number") timeRemaining: number = MATCH_DURATION;
+  @type("number") countdown: number = 0;
   @type("number") blueScore: number = 0;
   @type("number") redScore: number = 0;
   @type("string") winner: "blue" | "red" | "" = "";
@@ -79,11 +81,46 @@ const SPAWNS = MAP_SPAWNS;
 export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
   maxClients = MAX_PLAYERS;
 
+  /**
+   * Verify the guest JWT passed by the client as the matchmaking auth token
+   * (`Authorization: Bearer <token>`). The resolved identity becomes
+   * `client.auth` inside `onJoin`, so names/identities are server-trusted.
+   * When no token is supplied (dev/tests) we mint a random guest identity so
+   * the flow still works without the API running.
+   */
+  static async onAuth(token?: string): Promise<{ username: string; sub: string; guest: boolean }> {
+    if (!token) {
+      return {
+        username: `player${Math.floor(Math.random() * 100000)}`,
+        sub: `dev-${Math.floor(Math.random() * 100000)}`,
+        guest: true,
+      };
+    }
+    try {
+      const payload = jwt.verify(
+        token,
+        process.env.JWT_SECRET || "deashot-dev-secret-change-me"
+      ) as { username?: string; sub?: string };
+      return {
+        username: payload.username || `player${Math.floor(Math.random() * 100000)}`,
+        sub: payload.sub || `dev-${Math.floor(Math.random() * 100000)}`,
+        guest: true,
+      };
+    } catch {
+      throw new Error("Invalid token");
+    }
+  }
+
   private sim = new Map<string, SimPlayer>();
   private inputs = new Map<string, PendingInput>();
   private timeRemaining = MATCH_DURATION;
-  private phase: "waiting" | "in-progress" | "ended" = "waiting";
+  private phase: "waiting" | "warmup" | "in-progress" | "ended" = "waiting";
   private killLimit = KILL_LIMIT;
+  private warmupPlayers = 2;
+  private warmupSeconds = 3;
+  private countdownRunning = false;
+  private countdown = 0;
+  private countdownLastWhole = -1;
 
   onCreate(options: any) {
     this.setState(new MatchStateSchema());
@@ -97,6 +134,12 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
     if (typeof opts.duration === "number" && opts.duration > 0) {
       this.timeRemaining = opts.duration;
       this.state.timeRemaining = opts.duration;
+    }
+    if (typeof opts.warmupPlayers === "number" && opts.warmupPlayers >= 1) {
+      this.warmupPlayers = opts.warmupPlayers;
+    }
+    if (typeof opts.warmupSeconds === "number" && opts.warmupSeconds >= 1) {
+      this.warmupSeconds = opts.warmupSeconds;
     }
 
     this.setSimulationInterval((dt) => this.onTick(dt), 1000 / 60);
@@ -156,11 +199,12 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
       reloadTimer: 0,
     });
 
-    // Auto-start when enough players join (MVP: start on first join for testing).
-    if (this.state.phase === "waiting") {
-      this.state.phase = "in-progress";
-      this.phase = "in-progress";
+    // Enter warmup then countdown once enough players have joined.
+    if (this.phase === "waiting") {
+      this.phase = "warmup";
+      this.state.phase = "warmup";
     }
+    this.checkWarmup();
   }
 
   onLeave(client: Client) {
@@ -182,10 +226,46 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
     return n;
   }
 
+  /** Start the 3-2-1-GO countdown once enough players have joined. */
+  private checkWarmup() {
+    if (this.phase !== "warmup") return;
+    if (this.state.players.size >= this.warmupPlayers && !this.countdownRunning) {
+      this.startCountdown();
+    }
+  }
+
+  private startCountdown() {
+    this.countdownRunning = true;
+    this.countdown = this.warmupSeconds;
+    this.countdownLastWhole = -1;
+    this.state.countdown = this.countdown;
+    this.broadcast("countdown-start", { seconds: this.countdown });
+  }
+
+  private updateCountdown(dt: number) {
+    if (!this.countdownRunning) return;
+    this.countdown -= dt / 1000;
+    this.state.countdown = Math.max(0, this.countdown);
+    const whole = Math.ceil(this.countdown);
+    if (whole !== this.countdownLastWhole && whole > 0) {
+      this.countdownLastWhole = whole;
+      this.broadcast("countdown", { seconds: whole });
+    }
+    if (this.countdown <= 0) {
+      this.countdownRunning = false;
+      this.state.countdown = 0;
+      this.phase = "in-progress";
+      this.state.phase = "in-progress";
+      this.broadcast("countdown-start", { seconds: 0, go: true });
+    }
+  }
+
   private onTick(dt: number) {
     if (this.phase === "ended") return;
 
-    if (this.phase === "in-progress") {
+    if (this.phase === "warmup") {
+      this.updateCountdown(dt);
+    } else if (this.phase === "in-progress") {
       this.timeRemaining -= dt / 1000;
       if (this.timeRemaining <= 0) {
         this.timeRemaining = 0;

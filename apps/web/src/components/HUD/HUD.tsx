@@ -9,6 +9,7 @@ import { KillFeed } from "./KillFeed";
 
 interface HUDProps {
   state: GameState;
+  crosshairColor?: string;
   hitMarker: { active: boolean; headshot: boolean };
   damageIndicator: { active: boolean; amount: number; headshot: boolean };
   killFeed: Array<{ id: string; killer: string; killerTeam: string; victim: string; victimTeam: string; headshot: boolean; timestamp: number }>;
@@ -21,10 +22,10 @@ function formatTime(sec: number): string {
   return `${m}:${r.toString().padStart(2, "0")}`;
 }
 
-export const HUD: React.FC<HUDProps> = ({ state, hitMarker, damageIndicator, killFeed }) => {
+export const HUD: React.FC<HUDProps> = ({ state, crosshairColor, hitMarker, damageIndicator, killFeed }) => {
   return (
     <>
-      <Crosshair visible={state.crosshairVisible} />
+      <Crosshair visible={state.crosshairVisible} color={crosshairColor} />
       <HitMarker visible={hitMarker.active} headshot={hitMarker.headshot} />
       <DamageIndicator visible={damageIndicator.active} amount={damageIndicator.amount} headshot={damageIndicator.headshot} />
       <KillFeed entries={killFeed} />

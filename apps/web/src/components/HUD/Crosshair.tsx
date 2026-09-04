@@ -2,17 +2,18 @@ import React from "react";
 
 interface CrosshairProps {
   visible: boolean;
+  color?: string;
 }
 
-export const Crosshair: React.FC<CrosshairProps> = ({ visible }) => {
+export const Crosshair: React.FC<CrosshairProps> = ({ visible, color = "#00ff00" }) => {
   if (!visible) return null;
   return (
     <div style={styles.container}>
-      <div style={styles.dot} />
-      <div style={{ ...styles.line, top: -10, left: "50%", transform: "translateX(-50%)" }} />
-      <div style={{ ...styles.line, bottom: -10, left: "50%", transform: "translateX(-50%)" }} />
-      <div style={{ ...styles.lineH, left: -10, top: "50%", transform: "translateY(-50%)" }} />
-      <div style={{ ...styles.lineH, right: -10, top: "50%", transform: "translateY(-50%)" }} />
+      <div style={{ ...styles.dot, background: color }} />
+      <div style={{ ...styles.line, ...{ top: -10, left: "50%", transform: "translateX(-50%)", background: color } }} />
+      <div style={{ ...styles.line, ...{ bottom: -10, left: "50%", transform: "translateX(-50%)", background: color } }} />
+      <div style={{ ...styles.lineH, ...{ left: -10, top: "50%", transform: "translateY(-50%)", background: color } }} />
+      <div style={{ ...styles.lineH, ...{ right: -10, top: "50%", transform: "translateY(-50%)", background: color } }} />
     </div>
   );
 };

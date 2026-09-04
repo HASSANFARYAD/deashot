@@ -9,6 +9,8 @@ export { GameSocket } from "./networking/GameSocket";
 export interface CreateGameOptions {
   /** When true, connects to the game server for multiplayer. */
   online?: boolean;
+  /** Guest JWT used as the Colyseus auth token (identity). */
+  token?: string;
 }
 
 /**
@@ -23,7 +25,7 @@ export function createGame(
 ) {
   let socket: GameSocket | null = null;
   if (options.online) {
-    socket = new GameSocket();
+    socket = new GameSocket({}, options.token);
     socket.connect().catch((err) => {
       console.error("Failed to join game server:", err);
     });

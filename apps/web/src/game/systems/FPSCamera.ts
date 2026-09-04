@@ -14,18 +14,25 @@ export class FPSCamera {
   private yaw = 0;
   private pitch = 0;
   private fov = BASE_FOV;
+  private sensitivity = 1;
 
   constructor() {
     this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 500);
     this.camera.position.set(0, EYE_HEIGHT, 0);
   }
 
+  /** Set the mouse-sensitivity multiplier (1 = default). */
+  setSensitivity(value: number) {
+    this.sensitivity = value;
+  }
+
   /** Apply mouse look from input. */
   handleInput(input: InputState) {
     if (!input.pointerLocked) return;
-    this.yaw = normalizeAngle(this.yaw - input.mouseX * MOUSE_SENSITIVITY);
+    const sens = MOUSE_SENSITIVITY * this.sensitivity;
+    this.yaw = normalizeAngle(this.yaw - input.mouseX * sens);
     this.pitch = clamp(
-      this.pitch - input.mouseY * MOUSE_SENSITIVITY,
+      this.pitch - input.mouseY * sens,
       -PITCH_LIMIT,
       PITCH_LIMIT
     );

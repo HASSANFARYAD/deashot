@@ -74,11 +74,13 @@ All tests live alongside source in `*.test.ts` files and run via `vitest`.
 | `scripts/test-colyseus.cjs` | Two Colyseus clients join the same room, verify player count ≥ 2 |
 | `apps/web/scripts/test-combat.cjs` | Two clients: one shoots the other, verifies server-authoritative damage, death, respawn (Phase 3) |
 | `apps/web/scripts/test-match-end.cjs` | Two clients plus a fast kill-limit room: verifies win-by-kill-limit, match end, winner + accurate scores (Phase 4) |
-| `apps/web/scripts/test-browser-gate.cjs` | Two browser tabs join, see each other, movement syncs (Phase 2, Playwright) |
+| `apps/web/scripts/test-warmup.cjs` | A room holds in warmup at 1 player, then countdowns to in-progress at 2 (Phase 5) |
+| `apps/web/scripts/test-browser-gate.cjs` | Two browser tabs, guest login via API, join, see each other, movement syncs (Phase 2+5, Playwright) |
 
-Phase 3 also references `specifications/0005-combat.md` and the execution guide at
-`docs/phase3-combat.md`. Phase 4 references `specifications/0006-team-deathmatch.md`
-and the execution guide at `docs/phase4-tdm.md`.
+Phases reference their specs and execution guides: Phase 3 → `specifications/0005-combat.md`
++ `docs/phase3-combat.md`; Phase 4 → `specifications/0006-team-deathmatch.md`
++ `docs/phase4-tdm.md`; Phase 5 → `specifications/0007-lobby-match-flow.md`
++ `docs/phase5-lobby.md`.
 
 ### Manual smoke checklist (pre-merge for web changes)
 

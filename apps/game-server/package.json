@@ -9,12 +9,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@deashot/shared": "workspace:*",
+    "@colyseus/schema": "^2.0.37",
     "@deashot/game-config": "workspace:*",
+    "@deashot/shared": "workspace:*",
     "colyseus": "^0.15.0",
-    "@colyseus/schema": "^2.0.37"
+    "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0"
   }
