@@ -77,6 +77,7 @@ All tests live alongside source in `*.test.ts` files and run via `vitest`.
 | `apps/web/scripts/test-warmup.cjs` | A room holds in warmup at 1 player, then countdowns to in-progress at 2 (Phase 5) |
 | `apps/web/scripts/test-shot-validation.cjs` | A fires at B with a spoofed facing and a spoofed muzzle origin: both must deal zero damage, while an honest shot must still land (anti-cheat, audit P0-1) |
 | `apps/web/scripts/test-auth-hardening.cjs` | Starts its own server with the test escape hatches off: tokenless and forged joins rejected, valid token trusted, client-supplied room tuning ignored (audit P0-4, P0-5) |
+| `apps/web/scripts/test-api-hardening.cjs` | Starts its own API: usernames validated (length + charset), issued tokens carry an expiry, guest-login flood is rate limited (audit P1-21, P1-22) |
 | `apps/web/scripts/test-browser-gate.cjs` | Two browser tabs, guest login via API, join, see each other, movement syncs (Phase 2+5, Playwright) |
 
 Phases reference their specs and execution guides: Phase 3 → `specifications/0005-combat.md`

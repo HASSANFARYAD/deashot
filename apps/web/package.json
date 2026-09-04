@@ -13,6 +13,7 @@
     "test:warmup": "node scripts/test-warmup.cjs",
     "test:shots": "node scripts/test-shot-validation.cjs",
     "test:auth": "node scripts/test-auth-hardening.cjs",
+    "test:api": "node scripts/test-api-hardening.cjs",
     "test:browser": "node scripts/test-browser-gate.cjs",
     "typecheck": "tsc --noEmit"
   },
