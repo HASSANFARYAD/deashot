@@ -9,7 +9,8 @@
  * Anti-cheat: server-side shot validation — spoofed aim and spoofed muzzle
  *          origin are rejected, honest fire still lands (audit P0-1).
  * Hardening: tokenless/forged joins rejected and client room options ignored
- *          when the test escape hatches are off (audit P0-4, P0-5).
+ *          when the test escape hatches are off (audit P0-4, P0-5); API
+ *          usernames validated and guest login rate limited (P1-21, P1-22).
  * The browser gate test also starts the API (guest login) and the web preview.
  * Exit code = 0 if all phases pass, 1 otherwise.
  */
@@ -26,6 +27,7 @@ const MATCH_END_TEST = path.join(ROOT, "apps", "web", "scripts", "test-match-end
 const WARMUP_TEST = path.join(ROOT, "apps", "web", "scripts", "test-warmup.cjs");
 const SHOT_VALIDATION_TEST = path.join(ROOT, "apps", "web", "scripts", "test-shot-validation.cjs");
 const AUTH_HARDENING_TEST = path.join(ROOT, "apps", "web", "scripts", "test-auth-hardening.cjs");
+const API_HARDENING_TEST = path.join(ROOT, "apps", "web", "scripts", "test-api-hardening.cjs");
 const BROWSER_TEST  = path.join(ROOT, "apps", "web", "scripts", "test-browser-gate.cjs");
 
 const SERVER_PORT = 2567;
@@ -144,11 +146,13 @@ async function main() {
     execSync(`node "${SHOT_VALIDATION_TEST}"`, { cwd: ROOT, stdio: "inherit" });
     console.log("[integration] Anti-cheat PASSED\n");
 
-    // ===== Hardening: auth + room options (audit P0-4, P0-5) =====
-    // Starts its own server on another port, because this one deliberately
-    // runs with the test escape hatches enabled.
+    // ===== Hardening: auth, room options, API input (P0-4, P0-5, P1-21/22) =====
+    // Both start their own server on another port, because this one
+    // deliberately runs with the test escape hatches enabled.
     console.log("[integration] Hardening — auth required, room options ignored");
     execSync(`node "${AUTH_HARDENING_TEST}"`, { cwd: ROOT, stdio: "inherit" });
+    console.log("[integration] Hardening — API usernames validated, login rate limited");
+    execSync(`node "${API_HARDENING_TEST}"`, { cwd: ROOT, stdio: "inherit" });
     console.log("[integration] Hardening PASSED\n");
 
     // ===== Phase 2: Playwright browser gate test =====

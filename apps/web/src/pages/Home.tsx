@@ -1,5 +1,10 @@
 import React, { useState } from "react";
-import { guestLogin } from "../settings/api";
+import {
+  ApiError,
+  USERNAME_PATTERN,
+  USERNAME_RULE,
+  guestLogin,
+} from "../settings/api";
 
 interface HomeProps {
   /** Called with the guest token after login. */
@@ -12,14 +17,26 @@ export function Home({ onPlay }: HomeProps) {
   const [error, setError] = useState<null | string>(null);
 
   const play = async () => {
+    const name = username.trim();
+    // Check before the round trip so the rule is stated, not just enforced.
+    if (name && !USERNAME_PATTERN.test(name)) {
+      setError(`That name won't work — use ${USERNAME_RULE}`);
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
-      const name = username.trim();
       const res = await guestLogin(name || undefined);
       onPlay(res.token);
-    } catch {
-      setError("Could not reach the server. Is it running?");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 400) {
+        setError(`That name won't work — use ${USERNAME_RULE}`);
+      } else if (err instanceof ApiError && err.status === 429) {
+        setError("Too many sign-ins from your network. Wait a minute and retry.");
+      } else {
+        setError("Could not reach the server. Is it running?");
+      }
       setBusy(false);
     }
   };
@@ -35,7 +52,11 @@ export function Home({ onPlay }: HomeProps) {
           placeholder={`player${Math.floor(Math.random() * 100000)}`}
           maxLength={16}
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          aria-label="Username"
+          onChange={(e) => {
+            setUsername(e.target.value);
+            if (error) setError(null);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") play();
           }}

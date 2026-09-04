@@ -84,6 +84,13 @@ interface PendingInput {
 
 const SPAWNS = MAP_SPAWNS;
 
+/**
+ * Ceiling on room messages accepted per client per second. A legitimate client
+ * sends ~40 (30 Hz input + up to 10 shots); this leaves ample headroom for
+ * bursts while capping what a flooding client can cost the tick loop.
+ */
+const MAX_MESSAGES_PER_SECOND = 120;
+
 export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
   maxClients = MAX_PLAYERS;
 
@@ -125,6 +132,7 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
 
   private sim = new Map<string, SimPlayer>();
   private inputs = new Map<string, PendingInput>();
+  private messageBudget = new Map<string, { windowStart: number; count: number }>();
   private timeRemaining = MATCH_DURATION;
   private phase: "waiting" | "warmup" | "in-progress" | "ended" = "waiting";
   private killLimit = KILL_LIMIT;
@@ -160,6 +168,7 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
     this.setSimulationInterval((dt) => this.onTick(dt), 1000 / 60);
 
     this.onMessage("input", (client, input: any) => {
+      if (!this.allowMessage(client)) return;
       if (!input || typeof input !== "object") return;
       this.inputs.set(client.sessionId, {
         forward: !!input.forward,
@@ -180,6 +189,7 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
     });
 
     this.onMessage("shoot", (client, msg: any) => {
+      if (!this.allowMessage(client)) return;
       if (!msg || typeof msg !== "object") return;
       if (typeof msg.ox !== "number" || typeof msg.oy !== "number" || typeof msg.oz !== "number") return;
       if (typeof msg.dx !== "number" || typeof msg.dy !== "number" || typeof msg.dz !== "number") return;
@@ -231,11 +241,43 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
     this.state.players.delete(client.sessionId);
     this.sim.delete(client.sessionId);
     this.inputs.delete(client.sessionId);
+    this.messageBudget.delete(client.sessionId);
   }
 
   onDispose() {
     this.sim.clear();
     this.inputs.clear();
+    this.messageBudget.clear();
+  }
+
+  /**
+   * Per-client message budget.
+   *
+   * The fire-rate check gates *damage*, not *work*: every "shoot" message is
+   * still parsed, normalized and raycast against each player before it can be
+   * rejected. A client streaming thousands per second costs the whole room's
+   * tick budget, so drop anything past a generous ceiling.
+   *
+   * A legitimate client sends input at CLIENT_INPUT_RATE (30 Hz) plus at most
+   * 10 shots/second, so the real ceiling is ~40/s.
+   */
+  private allowMessage(client: Client): boolean {
+    const now = Date.now();
+    const budget = this.messageBudget.get(client.sessionId);
+    if (!budget || now - budget.windowStart >= 1000) {
+      this.messageBudget.set(client.sessionId, { windowStart: now, count: 1 });
+      return true;
+    }
+    budget.count++;
+    if (budget.count > MAX_MESSAGES_PER_SECOND) {
+      if (budget.count === MAX_MESSAGES_PER_SECOND + 1) {
+        console.warn(
+          `[tdm ${this.roomId}] message flood from ${client.sessionId}, dropping`
+        );
+      }
+      return false;
+    }
+    return true;
   }
 
   private playerCountOf(team: "blue" | "red"): number {

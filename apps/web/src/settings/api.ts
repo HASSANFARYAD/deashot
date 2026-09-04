@@ -18,13 +18,31 @@ export interface GuestLogin {
   sub: string;
 }
 
+/** Server-side rule in apps/api. Mirrored here so we can fail fast and explain. */
+export const USERNAME_PATTERN = /^[A-Za-z0-9_-]{3,16}$/;
+export const USERNAME_RULE =
+  "3-16 characters, letters, numbers, hyphen or underscore.";
+
+/** Carries the HTTP status so callers can tell "rejected" from "unreachable". */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function guestLogin(username?: string): Promise<GuestLogin> {
   const res = await fetch(`${API_URL}/auth/guest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username: username || undefined }),
   });
-  if (!res.ok) throw new Error(`Guest login failed (${res.status})`);
+  if (!res.ok) {
+    throw new ApiError(`Guest login failed (${res.status})`, res.status);
+  }
   return res.json();
 }
 
