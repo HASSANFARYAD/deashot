@@ -20,6 +20,7 @@ import {
   SHOT_ORIGIN_TOLERANCE,
 } from "@deashot/game-config";
 import { clamp, normalizeAngle, lookVectorFromYawPitch } from "@deashot/math";
+import { ALLOW_TEST_ROOM_OPTIONS, JWT_SECRET, REQUIRE_AUTH } from "../config";
 
 /** Syncable player state schema sent to all clients. */
 export class PlayerStateSchema extends Schema {
@@ -90,11 +91,17 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
    * Verify the guest JWT passed by the client as the matchmaking auth token
    * (`Authorization: Bearer <token>`). The resolved identity becomes
    * `client.auth` inside `onJoin`, so names/identities are server-trusted.
-   * When no token is supplied (dev/tests) we mint a random guest identity so
-   * the flow still works without the API running.
+   *
+   * With no token supplied the behaviour depends on `REQUIRE_AUTH`: on it the
+   * join is rejected (spec 0007 section 2), off it we mint a throwaway guest
+   * identity so `pnpm dev:server` and the integration harness work without the
+   * API running.
    */
   static async onAuth(token?: string): Promise<{ username: string; sub: string; guest: boolean }> {
     if (!token) {
+      if (REQUIRE_AUTH) {
+        throw new Error("Authentication required");
+      }
       return {
         username: `player${Math.floor(Math.random() * 100000)}`,
         sub: `dev-${Math.floor(Math.random() * 100000)}`,
@@ -102,10 +109,10 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
       };
     }
     try {
-      const payload = jwt.verify(
-        token,
-        process.env.JWT_SECRET || "deashot-dev-secret-change-me"
-      ) as { username?: string; sub?: string };
+      const payload = jwt.verify(token, JWT_SECRET) as {
+        username?: string;
+        sub?: string;
+      };
       return {
         username: payload.username || `player${Math.floor(Math.random() * 100000)}`,
         sub: payload.sub || `dev-${Math.floor(Math.random() * 100000)}`,
@@ -131,8 +138,11 @@ export class TeamDeathmatchRoom extends Room<MatchStateSchema> {
     this.setState(new MatchStateSchema());
     this.state.id = `tdm-${this.roomId}`;
 
-    // Optional per-room overrides (e.g. for fast integration tests).
-    const opts = options ?? {};
+    // Optional per-room overrides for deterministic integration tests. These
+    // arrive in the client's `joinOrCreate` payload, so honouring them in
+    // production would let any browser console open a room with
+    // `killLimit: 1` and win a match with a single kill.
+    const opts = ALLOW_TEST_ROOM_OPTIONS ? options ?? {} : {};
     this.killLimit = typeof opts.killLimit === "number" && opts.killLimit > 0
       ? opts.killLimit
       : KILL_LIMIT;

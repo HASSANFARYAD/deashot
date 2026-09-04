@@ -1,6 +1,6 @@
 # 0007 — Lobby & Match Flow (End-to-End User Journey)
 
-**Status:** Implemented | **Version:** 1.1 | **Owner:** @HASSANFARYAD
+**Status:** Implemented | **Version:** 1.2 | **Owner:** @HASSANFARYAD
 
 ## Overview
 
@@ -51,6 +51,36 @@ a match with zero documentation.
   same `JWT_SECRET` used by the API and returns `{ username, sub }` so
   `client.auth` is populated. Invalid/missing tokens are rejected with a clear
   error and do not join.
+
+#### Enforcement (v1.2)
+
+v1.1 shipped this only for *invalid* tokens. A client that sent **no** token was
+handed a generated guest identity, so the gate above was effectively opt-in and
+anyone could join under any name. Missing tokens are now rejected whenever
+`REQUIRE_AUTH` is set, which defaults on when `NODE_ENV=production`.
+
+The generated identity remains available for `pnpm dev:server` and the
+integration harness, which run without the API; both opt in explicitly.
+
+Configuration is resolved once at boot in `apps/game-server/src/config.ts`:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `JWT_SECRET` | dev fallback outside production | Shared with the API. **Absent in production, both services refuse to start** rather than use the fallback, which is a literal published in this repository. |
+| `REQUIRE_AUTH` | on in production | Reject clients that supply no token. |
+| `ALLOW_TEST_ROOM_OPTIONS` | off, and always off in production | Honour `killLimit` / `duration` / `warmupPlayers` / `warmupSeconds` from the client's `joinOrCreate` payload. |
+
+Guest tokens issued by `POST /auth/guest` now carry a 12-hour expiry; they were
+previously valid forever.
+
+The `ALLOW_TEST_ROOM_OPTIONS` gate matters because those overrides arrive in the
+client's join payload: with it on in production, any browser console could open
+a room with `killLimit: 1` and win a match with a single kill.
+
+Regression test: `apps/web/scripts/test-auth-hardening.cjs` starts its own
+server with the escape hatches off and asserts that tokenless and forged joins
+are rejected, a valid token is trusted for the player's name, and a
+client-supplied `duration` is ignored.
 
 ### 3. Warmup + countdown (server-authoritative)
 - Add `warmup` to the match phase set: `waiting → warmup → in-progress → ended`.
@@ -119,6 +149,13 @@ the verified JWT.
 
 **Changelog**
 
+- v1.2 — Enforced the auth gate v1.1 only described (audit P0-4, P0-5). Missing
+  tokens are rejected under `REQUIRE_AUTH`; client-supplied room tuning is
+  ignored unless `ALLOW_TEST_ROOM_OPTIONS` is set and never honoured in
+  production; both services refuse to start in production without `JWT_SECRET`;
+  guest tokens expire after 12h. `docker-compose.yml` no longer hardcodes the
+  published dev secret and now passes it to the game server, which previously
+  received none. Adds `test-auth-hardening.cjs`.
 - v1.1 — Implemented Phase 5: static `onAuth` JWT verification in
   `TeamDeathmatchRoom`; `warmup` phase + `countdown` in `MatchStateSchema`;
   room options `warmupPlayers`/`warmupSeconds`; API `GET/PUT /profile/settings`;

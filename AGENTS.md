@@ -76,6 +76,7 @@ All tests live alongside source in `*.test.ts` files and run via `vitest`.
 | `apps/web/scripts/test-match-end.cjs` | Two clients plus a fast kill-limit room: verifies win-by-kill-limit, match end, winner + accurate scores (Phase 4) |
 | `apps/web/scripts/test-warmup.cjs` | A room holds in warmup at 1 player, then countdowns to in-progress at 2 (Phase 5) |
 | `apps/web/scripts/test-shot-validation.cjs` | A fires at B with a spoofed facing and a spoofed muzzle origin: both must deal zero damage, while an honest shot must still land (anti-cheat, audit P0-1) |
+| `apps/web/scripts/test-auth-hardening.cjs` | Starts its own server with the test escape hatches off: tokenless and forged joins rejected, valid token trusted, client-supplied room tuning ignored (audit P0-4, P0-5) |
 | `apps/web/scripts/test-browser-gate.cjs` | Two browser tabs, guest login via API, join, see each other, movement syncs (Phase 2+5, Playwright) |
 
 Phases reference their specs and execution guides: Phase 3 → `specifications/0005-combat.md`
@@ -137,3 +138,11 @@ Concurrency is enabled: only one CI run per branch at a time; earlier runs cance
 - `.env` is gitignored. `.env.example` is committed as a template.
 - Never commit API keys, tokens, or database URLs.
 - Colyseus `authToken` and JWT `SECRET` are set via environment variables at runtime only.
+- `JWT_SECRET` is shared by the API (signs guest tokens) and the game server
+  (verifies them). Both fall back to a development literal outside production
+  and **refuse to start** when `NODE_ENV=production` without it — that literal
+  is public in this repo, so any deploy using it accepts forged tokens.
+- Escape hatches that weaken the trust boundary are opt-in, off by default, and
+  forced off in production: `REQUIRE_AUTH=0` (allow tokenless joins) and
+  `ALLOW_TEST_ROOM_OPTIONS=1` (honour client-supplied match tuning). Only the
+  integration harness sets them. See `apps/game-server/src/config.ts`.

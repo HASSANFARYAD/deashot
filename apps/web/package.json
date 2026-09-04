@@ -12,6 +12,7 @@
     "test:match": "node scripts/test-match-end.cjs",
     "test:warmup": "node scripts/test-warmup.cjs",
     "test:shots": "node scripts/test-shot-validation.cjs",
+    "test:auth": "node scripts/test-auth-hardening.cjs",
     "test:browser": "node scripts/test-browser-gate.cjs",
     "typecheck": "tsc --noEmit"
   },
@@ -29,6 +30,7 @@
     "@types/react-dom": "^19.1.0",
     "@types/three": "^0.175.0",
     "@vitejs/plugin-react": "^4.4.0",
+    "jsonwebtoken": "^9.0.3",
     "playwright": "^1.62.1",
     "typescript": "^5.8.0",
     "vite": "^6.3.0"
