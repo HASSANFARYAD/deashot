@@ -23,15 +23,17 @@ export interface PlayerState {
   deaths: number;
 }
 
-export type MatchPhase = "waiting" | "in-progress" | "ended";
+export type MatchPhase = "waiting" | "warmup" | "in-progress" | "ended";
 
 export interface MatchState {
   id: string;
   mode: "tdm";
   map: string;
   phase: MatchPhase;
-  /** Seconds remaining. */
+  /** Seconds remaining in the match, once started. */
   timeRemaining: number;
+  /** Seconds remaining in the pre-match countdown (0 when not counting). */
+  countdown: number;
   /** Blue team total kills. */
   blueScore: number;
   /** Red team total kills. */

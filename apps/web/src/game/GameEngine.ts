@@ -33,6 +33,7 @@ export interface GameState {
   /** Online match info (defaults when offline / not yet connected). */
   phase: string;
   timeRemaining: number;
+  countdown: number;
   blueScore: number;
   redScore: number;
   winner: string;
@@ -81,6 +82,7 @@ export class GameEngine {
   private serverMatch: {
     phase: string;
     timeRemaining: number;
+    countdown: number;
     blueScore: number;
     redScore: number;
     winner: string;
@@ -204,6 +206,7 @@ export class GameEngine {
       this.serverMatch = {
         phase: snapshot.phase,
         timeRemaining: snapshot.timeRemaining,
+        countdown: snapshot.countdown ?? 0,
         blueScore: snapshot.blueScore,
         redScore: snapshot.redScore,
         winner: snapshot.winner,
@@ -264,6 +267,7 @@ export class GameEngine {
       crosshairVisible: this.input.pointerLocked,
       phase: m?.phase ?? "waiting",
       timeRemaining: m?.timeRemaining ?? 0,
+      countdown: m?.countdown ?? 0,
       blueScore: m?.blueScore ?? 0,
       redScore: m?.redScore ?? 0,
       winner: m?.winner ?? "",
@@ -370,6 +374,13 @@ export class GameEngine {
   /** Debug/testing accessor: whether connected to the server. */
   isConnected(): boolean {
     return this.socket?.connected ?? false;
+  }
+
+  /** Apply user settings that affect the engine (mouse sensitivity). */
+  applySettings(settings: { sensitivity?: number }) {
+    if (typeof settings.sensitivity === "number") {
+      this.camera.setSensitivity(settings.sensitivity);
+    }
   }
 
   dispose() {

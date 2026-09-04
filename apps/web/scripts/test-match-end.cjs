@@ -38,14 +38,19 @@ async function run() {
   const clientA = new Client(SERVER);
   const clientB = new Client(SERVER);
 
-  // Create a room with a small kill limit + short duration.
+  // Create a room with a small kill limit + short duration. warmupPlayers: 1
+  // makes the match start immediately (no waiting for a 2nd player/countdown).
   const roomA = await clientA.joinOrCreate("tdm", {
     killLimit: KILL_LIMIT,
     duration: 30,
+    warmupPlayers: 1,
+    warmupSeconds: 1,
   });
   const roomB = await clientB.joinOrCreate("tdm", {
     killLimit: KILL_LIMIT,
     duration: 30,
+    warmupPlayers: 1,
+    warmupSeconds: 1,
   });
 
   // Register noop combat listeners to keep colyseus.js quiet.

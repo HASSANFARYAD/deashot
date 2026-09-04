@@ -5,6 +5,8 @@
  * Phase 3: server-authoritative combat test (damage, death, respawn via two
  *          Colyseus clients).
  * Phase 4: TDM match lifecycle test (win-by-kill-limit, match end, winner).
+ * Phase 5: lobby/warmup test (warmup → countdown → in-progress).
+ * The browser gate test also starts the API (guest login) and the web preview.
  * Exit code = 0 if all phases pass, 1 otherwise.
  */
 const { spawn, execSync } = require("child_process");
@@ -13,13 +15,16 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const SERVER  = path.join(ROOT, "apps", "game-server", "dist", "index.js");
+const API     = path.join(ROOT, "apps", "api", "dist", "index.js");
 const COLYSEUS_TEST = path.join(ROOT, "apps", "web", "scripts", "test-colyseus.cjs");
 const COMBAT_TEST   = path.join(ROOT, "apps", "web", "scripts", "test-combat.cjs");
 const MATCH_END_TEST = path.join(ROOT, "apps", "web", "scripts", "test-match-end.cjs");
+const WARMUP_TEST = path.join(ROOT, "apps", "web", "scripts", "test-warmup.cjs");
 const BROWSER_TEST  = path.join(ROOT, "apps", "web", "scripts", "test-browser-gate.cjs");
 const WEB_DIST = path.join(ROOT, "apps", "web", "dist", "index.html");
 
 const SERVER_PORT = 2567;
+const API_PORT    = 4000;
 const WEB_PORT    = 4173;
 
 function waitForPort(port, timeoutMs = 30_000) {
@@ -48,6 +53,7 @@ function killProc(proc, label) {
 
 async function main() {
   let serverProc = null;
+  let apiProc    = null;
   let webProc    = null;
   let failed     = false;
 
@@ -75,8 +81,23 @@ async function main() {
     execSync(`node "${MATCH_END_TEST}"`, { cwd: ROOT, stdio: "inherit" });
     console.log("[integration] Phase 4 PASSED\n");
 
+    // ===== Phase 5: lobby/warmup test =====
+    console.log("[integration] Phase 5 — warmup/countdown lobby test");
+    execSync(`node "${WARMUP_TEST}"`, { cwd: ROOT, stdio: "inherit" });
+    console.log("[integration] Phase 5 PASSED\n");
+
     // ===== Phase 2: Playwright browser gate test =====
     console.log("[integration] Phase 2 — Playwright browser gate test");
+
+    // The web app's guest login needs the API; start it on the default port.
+    console.log(`[integration] Starting API on port ${API_PORT}...`);
+    apiProc = spawn(process.execPath, [API], {
+      cwd: path.join(ROOT, "apps", "api"),
+      stdio: "ignore",
+      env: { ...process.env, PORT: String(API_PORT) },
+    });
+    await waitForPort(API_PORT);
+    console.log("[integration] API ready on port " + API_PORT);
 
     // Ensure the web app is built.
     console.log("[integration] Building web app...");
@@ -105,6 +126,7 @@ async function main() {
     failed = true;
   } finally {
     killProc(webProc, "web preview");
+    killProc(apiProc, "API");
     killProc(serverProc, "game server");
   }
 

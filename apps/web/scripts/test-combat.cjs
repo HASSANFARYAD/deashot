@@ -47,12 +47,22 @@ function getPlayer(room, sid) {
   return sid ? allPlayers(room)[sid] : null;
 }
 
+function phaseOf(room) {
+  return room.state ? room.state.phase : null;
+}
+
 async function run() {
   const clientA = new Client(SERVER);
   const clientB = new Client(SERVER);
   console.log("[combat-test] Connecting two clients...");
-  const roomA = await clientA.joinOrCreate("tdm");
-  const roomB = await clientB.joinOrCreate("tdm");
+  const roomA = await clientA.joinOrCreate("tdm", {
+    warmupPlayers: 1,
+    warmupSeconds: 1,
+  });
+  const roomB = await clientB.joinOrCreate("tdm", {
+    warmupPlayers: 1,
+    warmupSeconds: 1,
+  });
   console.log("[combat-test] A:", roomA.sessionId, "| B:", roomB.sessionId);
 
   // Register noop handlers for combat broadcasts so colyseus.js logs nothing.
@@ -105,6 +115,18 @@ async function run() {
   }
   if (!shooter || !victimStart) {
     console.log("[combat-test] FAIL — shooter or victim state missing");
+    process.exit(1);
+  }
+
+  // Wait for the match to leave warmup/countdown and become playable.
+  for (let i = 0; i < 50; i++) {
+    if (phaseOf(roomA) === "in-progress") break;
+    await sleep(100);
+  }
+  if (phaseOf(roomA) !== "in-progress") {
+    console.log(
+      `[combat-test] FAIL — room never reached in-progress (phase=${phaseOf(roomA)})`
+    );
     process.exit(1);
   }
 

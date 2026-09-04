@@ -39,3 +39,4 @@ Specs are numbered sequentially: `NNNN-<short-slug>.md` (e.g. `0001-tdm-rules.md
 | 0004 | [AI Rules & Contributing](./0004-ai-rules.md) | Implemented |
 | 0005 | [Combat](./0005-combat.md) | Implemented |
 | 0006 | [Team Deathmatch](./0006-team-deathmatch.md) | Implemented |
+| 0007 | [Lobby & Match Flow](./0007-lobby-match-flow.md) | Implemented |

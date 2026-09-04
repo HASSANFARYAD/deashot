@@ -32,6 +32,7 @@ export interface SnapshotPlayer {
 export interface MatchSnapshot {
   phase: string;
   timeRemaining: number;
+  countdown: number;
   blueScore: number;
   redScore: number;
   winner: string;
@@ -106,6 +107,7 @@ export class GameSocket {
   private mirror: MatchSnapshot = {
     phase: "waiting",
     timeRemaining: 0,
+    countdown: 0,
     blueScore: 0,
     redScore: 0,
     winner: "",
@@ -115,9 +117,10 @@ export class GameSocket {
 
   readonly callbacks: GameSocketCallbacks;
 
-  constructor(callbacks: GameSocketCallbacks = {}) {
+  constructor(callbacks: GameSocketCallbacks = {}, token?: string) {
     this.client = new Client("ws://localhost:2567");
     this.callbacks = callbacks;
+    if (token) this.client.auth.token = token;
   }
 
   get sessionId(): string {
@@ -151,6 +154,7 @@ export class GameSocket {
       this.mirror = {
         phase: state.phase,
         timeRemaining: state.timeRemaining,
+        countdown: state.countdown ?? 0,
         blueScore: state.blueScore,
         redScore: state.redScore,
         winner: state.winner ?? "",
