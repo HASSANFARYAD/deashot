@@ -4,7 +4,11 @@ services:
     ports:
       - "4000:4000"
     environment:
-      - JWT_SECRET=deashot-dev-secret-change-me
+      # Never hardcode this. The previous literal was the development fallback
+      # published in this repository, so any deploy using it accepted forged
+      # tokens. `:?` fails the run when it is unset rather than defaulting.
+      - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in .env before running}
+      - NODE_ENV=${NODE_ENV:-production}
       - DATABASE_URL=postgres://deashot:deashot@postgres:5432/deashot
       - REDIS_URL=redis://redis:6379
     depends_on:
@@ -17,6 +21,12 @@ services:
       - "2567:2567"
     environment:
       - PORT=2567
+      # The game server verifies the tokens the API signs, so it needs the same
+      # secret. It previously got none and silently fell back to the dev
+      # default, which meant setting a real secret on the API alone broke every
+      # join.
+      - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in .env before running}
+      - NODE_ENV=${NODE_ENV:-production}
     depends_on:
       - redis
 

@@ -4,6 +4,29 @@ import jwt from "@fastify/jwt";
 
 const port = Number(process.env.PORT || 4000);
 
+const DEV_JWT_SECRET = "deashot-dev-secret-change-me";
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+/**
+ * Must match the game server's secret — it verifies the tokens signed here.
+ * The development fallback is a literal published in this repository, so a
+ * production deploy using it would accept tokens forged by anyone.
+ */
+const JWT_SECRET: string = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (secret) return secret;
+  if (IS_PRODUCTION) {
+    throw new Error(
+      "JWT_SECRET is required when NODE_ENV=production. Refusing to start with " +
+        "the development fallback, which is public in this repository."
+    );
+  }
+  return DEV_JWT_SECRET;
+})();
+
+/** Guest tokens are disposable identities, not long-lived credentials. */
+const GUEST_TOKEN_TTL = "12h";
+
 interface ProfileSettings {
   sensitivity: number;
   volume: number;
@@ -24,9 +47,7 @@ async function main() {
 
   await app.register(cors, { origin: true });
 
-  await app.register(jwt, {
-    secret: process.env.JWT_SECRET || "deashot-dev-secret-change-me",
-  });
+  await app.register(jwt, { secret: JWT_SECRET });
 
   // Health check
   app.get("/health", async () => ({ status: "ok" }));
@@ -36,7 +57,10 @@ async function main() {
     const username =
       (request.body as any)?.username || `player${Math.floor(Math.random() * 100000)}`;
     const sub = `guest-${Math.floor(Math.random() * 1e9)}`;
-    const token = app.jwt.sign({ username, guest: true, sub });
+    const token = app.jwt.sign(
+      { username, guest: true, sub },
+      { expiresIn: GUEST_TOKEN_TTL }
+    );
     return { token, username, sub };
   });
 
