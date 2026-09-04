@@ -63,7 +63,7 @@ All tests live alongside source in `*.test.ts` files and run via `vitest`.
 
 | Package | File | Tests |
 |---|---|---|
-| `@deashot/math` | `src/math.test.ts` | clamp, lerp, length3, normalizeAngle, directionFromYawPitch |
+| `@deashot/math` | `src/math.test.ts` | clamp, lerp, length3, normalizeAngle (incl. non-finite and large-magnitude input), lookVectorFromYawPitch |
 | `@deashot/shared` | `src/protocol.test.ts` | PlayerInput JSON round-trip, default shape, match constant sanity |
 | `@deashot/game-config` | `src/config.test.ts` | ASSAULT_RIFLE stats validity, weapon lookup, player physics sanity |
 
@@ -75,6 +75,7 @@ All tests live alongside source in `*.test.ts` files and run via `vitest`.
 | `apps/web/scripts/test-combat.cjs` | Two clients: one shoots the other, verifies server-authoritative damage, death, respawn (Phase 3) |
 | `apps/web/scripts/test-match-end.cjs` | Two clients plus a fast kill-limit room: verifies win-by-kill-limit, match end, winner + accurate scores (Phase 4) |
 | `apps/web/scripts/test-warmup.cjs` | A room holds in warmup at 1 player, then countdowns to in-progress at 2 (Phase 5) |
+| `apps/web/scripts/test-shot-validation.cjs` | A fires at B with a spoofed facing and a spoofed muzzle origin: both must deal zero damage, while an honest shot must still land (anti-cheat, audit P0-1) |
 | `apps/web/scripts/test-browser-gate.cjs` | Two browser tabs, guest login via API, join, see each other, movement syncs (Phase 2+5, Playwright) |
 
 Phases reference their specs and execution guides: Phase 3 → `specifications/0005-combat.md`

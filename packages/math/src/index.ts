@@ -13,18 +13,38 @@ export function length3(x: number, y: number, z: number): number {
   return Math.sqrt(x * x + y * y + z * z);
 }
 
-/** Normalize angles to [-PI, PI]. */
+/**
+ * Normalize angles to [-PI, PI].
+ *
+ * Uses a single modulo rather than subtract-in-a-loop: the loop form runs
+ * forever on a non-finite input, and this function is reachable from
+ * unvalidated network yaw. Non-finite input normalizes to 0.
+ */
 export function normalizeAngle(angle: number): number {
-  while (angle > Math.PI) angle -= Math.PI * 2;
-  while (angle < -Math.PI) angle += Math.PI * 2;
-  return angle;
+  if (!Number.isFinite(angle)) return 0;
+  const twoPi = Math.PI * 2;
+  const wrapped = angle % twoPi;
+  if (wrapped > Math.PI) return wrapped - twoPi;
+  if (wrapped < -Math.PI) return wrapped + twoPi;
+  return wrapped;
 }
 
-/** Direction vector from yaw/pitch. Returns [x, y, z]. */
-export function directionFromYawPitch(yaw: number, pitch: number): [number, number, number] {
+/**
+ * Unit look vector from yaw/pitch, in the project's camera convention:
+ * forward at yaw=0, pitch=0 is -Z, matching `THREE.Euler(pitch, yaw, 0, "YXZ")`
+ * applied to a camera and the `(-sin(yaw), -cos(yaw))` horizontal forward used
+ * by `FPSCamera.getForwardXZ` and the server's movement integration.
+ *
+ * Returns [x, y, z].
+ */
+export function lookVectorFromYawPitch(
+  yaw: number,
+  pitch: number
+): [number, number, number] {
+  const cosPitch = Math.cos(pitch);
   return [
-    Math.cos(pitch) * Math.sin(yaw),
+    -Math.sin(yaw) * cosPitch,
     Math.sin(pitch),
-    Math.cos(pitch) * Math.cos(yaw),
+    -Math.cos(yaw) * cosPitch,
   ];
 }

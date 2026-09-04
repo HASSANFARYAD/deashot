@@ -6,6 +6,8 @@
  *          Colyseus clients).
  * Phase 4: TDM match lifecycle test (win-by-kill-limit, match end, winner).
  * Phase 5: lobby/warmup test (warmup → countdown → in-progress).
+ * Anti-cheat: server-side shot validation — spoofed aim and spoofed muzzle
+ *          origin are rejected, honest fire still lands (audit P0-1).
  * The browser gate test also starts the API (guest login) and the web preview.
  * Exit code = 0 if all phases pass, 1 otherwise.
  */
@@ -20,6 +22,7 @@ const COLYSEUS_TEST = path.join(ROOT, "apps", "web", "scripts", "test-colyseus.c
 const COMBAT_TEST   = path.join(ROOT, "apps", "web", "scripts", "test-combat.cjs");
 const MATCH_END_TEST = path.join(ROOT, "apps", "web", "scripts", "test-match-end.cjs");
 const WARMUP_TEST = path.join(ROOT, "apps", "web", "scripts", "test-warmup.cjs");
+const SHOT_VALIDATION_TEST = path.join(ROOT, "apps", "web", "scripts", "test-shot-validation.cjs");
 const BROWSER_TEST  = path.join(ROOT, "apps", "web", "scripts", "test-browser-gate.cjs");
 
 const SERVER_PORT = 2567;
@@ -84,6 +87,11 @@ async function main() {
     console.log("[integration] Phase 5 — warmup/countdown lobby test");
     execSync(`node "${WARMUP_TEST}"`, { cwd: ROOT, stdio: "inherit" });
     console.log("[integration] Phase 5 PASSED\n");
+
+    // ===== Anti-cheat: server-side shot validation (audit P0-1) =====
+    console.log("[integration] Anti-cheat — shot validation (spoofed aim/origin)");
+    execSync(`node "${SHOT_VALIDATION_TEST}"`, { cwd: ROOT, stdio: "inherit" });
+    console.log("[integration] Anti-cheat PASSED\n");
 
     // ===== Phase 2: Playwright browser gate test =====
     console.log("[integration] Phase 2 — Playwright browser gate test");

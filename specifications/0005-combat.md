@@ -1,6 +1,6 @@
 # 0005 — Combat (Server-Authoritative)
 
-**Status:** Implemented | **Version:** 1.0 | **Owner:** @HASSANFARYAD
+**Status:** Implemented | **Version:** 1.1 | **Owner:** @HASSANFARYAD
 
 ## Overview
 
@@ -127,11 +127,42 @@ snapshot (`PlayerStateSchema`) for reconciliation and HUD display.
 - Client never sends damage values — it only reports a shot.
 - No lag compensation this phase (noted as a future phase in 0003).
 
+### Shot geometry validation (v1.1)
+
+Validating fire rate and ammo alone is not enough: through v1.0 the server
+raycast from the origin supplied in the `"shoot"` message and never compared it
+to the shooter's actual position or facing. A modified client could place the
+ray beside any enemy's head and land a guaranteed headshot from anywhere on the
+map. The client is now trusted for *intent*, never for *geometry*:
+
+| Field | Treatment |
+|---|---|
+| `ox, oy, oz` | **Ignored for hit detection.** The server raycasts from its own reconstruction, `(player.x, player.y + EYE_HEIGHT, player.z)`. A reported origin further than `SHOT_ORIGIN_TOLERANCE` from that point is logged as a cheat signal. |
+| `dx, dy, dz` | Normalized, then required to lie within `SHOT_AIM_TOLERANCE` radians of the look vector implied by the `yaw`/`pitch` the server last accepted from that client. Shots outside the cone are dropped silently. |
+
+The look vector uses the project camera convention —
+`(-sin(yaw)·cos(pitch), sin(pitch), -cos(yaw)·cos(pitch))` — exposed as
+`lookVectorFromYawPitch` in `@deashot/math`.
+
+`yaw` and `pitch` on the `"input"` message are normalized and clamped on
+arrival (see 0003), so the cone is anchored to a facing the client could
+legitimately have reached.
+
+Tolerances live in `packages/game-config/src/combat.ts`. They are sized for one
+input interval of head movement (30 Hz), not to police latency.
+
+Regression test: `apps/web/scripts/test-shot-validation.cjs` fires three
+bursts — spoofed aim, spoofed origin, and an honest shot — asserting the first
+two deal no damage and the third still does.
+
 ## Out of scope (Phase 3)
 
 - Scoreboard, kill attribution/assists, match lifecycle → Phase 4.
 - Recoil spread applied server-side (visual only this phase) → polish.
 - Lag compensation / rewind hit validation → later.
+- **World-geometry occlusion.** The server still raycasts only against player
+  capsules, so cover does not block shots. Tracked as audit P0-2; lands with
+  the shared client/server collision module.
 
 ---
 
@@ -139,3 +170,9 @@ snapshot (`PlayerStateSchema`) for reconciliation and HUD display.
 
 - v1.0 — Initial spec for Phase 3 (server-authoritative hitscan combat, damage,
   kill, death, respawn, client feedback HUD).
+- v1.1 — Shot geometry validation (audit P0-1). The server reconstructs the
+  muzzle origin from its own player state and requires the reported direction
+  to match the shooter's synced facing; the client-supplied origin is now
+  telemetry only. Adds `SHOT_AIM_TOLERANCE` / `SHOT_ORIGIN_TOLERANCE` to
+  `@deashot/game-config` and `lookVectorFromYawPitch` to `@deashot/math`.
+  Records world-geometry occlusion as a known gap.

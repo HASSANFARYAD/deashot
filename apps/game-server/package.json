@@ -11,6 +11,7 @@
   "dependencies": {
     "@colyseus/schema": "^2.0.37",
     "@deashot/game-config": "workspace:*",
+    "@deashot/math": "workspace:*",
     "@deashot/shared": "workspace:*",
     "colyseus": "^0.15.0",
     "jsonwebtoken": "^9.0.3"

@@ -11,6 +11,7 @@
     "test:combat": "node scripts/test-combat.cjs",
     "test:match": "node scripts/test-match-end.cjs",
     "test:warmup": "node scripts/test-warmup.cjs",
+    "test:shots": "node scripts/test-shot-validation.cjs",
     "test:browser": "node scripts/test-browser-gate.cjs",
     "typecheck": "tsc --noEmit"
   },

@@ -1,6 +1,6 @@
 # 0003 — Networking Protocol
 
-**Status:** Implemented | **Version:** 2.0 | **Owner:** @HASSANFARYAD
+**Status:** Implemented | **Version:** 2.1 | **Owner:** @HASSANFARYAD
 
 ## Overview
 
@@ -38,6 +38,28 @@ interface PlayerInput {
 
 Defined in `packages/shared/src/protocol/input.ts`. This is a plain TypeScript
 interface — the JSON wire format is the object serialized directly.
+
+### Server-side input sanitisation (v2.1)
+
+The interface describes what a cooperative client sends; the server assumes
+none of it. On arrival every field is coerced to its declared type, and the
+rotation fields are additionally constrained:
+
+| Field | Constraint |
+|---|---|
+| `forward` … `reload` | Coerced to boolean. |
+| `yaw` | Non-finite → `0`, otherwise wrapped to `[-PI, PI]` via `normalizeAngle`. |
+| `pitch` | Non-finite → `0`, otherwise clamped to `±PITCH_LIMIT`. |
+
+Two notes on why this is stricter than it looks. `pitch` was documented as
+"clamped ±PI/2" from v1.0 but the clamp existed only on the client, so a
+modified client could aim outside the camera's reachable range. And the guard
+must use `Number.isFinite`, not the global `isFinite`, which coerces its
+argument — `isFinite("5")` is `true`, so a string reached a numeric schema
+field. A lint rule now blocks the global repo-wide.
+
+The accepted `yaw`/`pitch` are what shot validation checks fired directions
+against (see 0005), so sanitising here is what makes that cone meaningful.
 
 ## Server state: MatchState
 
@@ -134,6 +156,9 @@ between them. This removes the discrete snapshot "steps". See
 
 **Changelog**
 
+- v2.1 — Server-side input sanitisation (audit P1-20): `yaw` normalized,
+  `pitch` clamped to `PITCH_LIMIT`, both guarded with `Number.isFinite`.
+  `normalizeAngle` no longer loops, so a non-finite yaw can't hang the tick.
 - v2.0 — Phase 2: implemented client prediction + reconciliation, remote player
   interpolation, camera-relative server movement, unified map/spawn config;
   corrected `MatchPhase` (`ended` not `finished`), documented client polling.
