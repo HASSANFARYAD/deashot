@@ -503,6 +503,10 @@ Server validates: weapon fire rate, player alive, ammo available, shot possible.
 
 ### Phase 6 — Polish & Feel
 
+> **Executor resource:** `docs/phase6-polish.md` — current state, exact file map,
+> implementation order, per-slice steps, and the 60 FPS gate. Read it before
+> writing any Phase 6 code.
+
 **Goal:** The game feels good to play. Not just functional, but enjoyable.
 
 **Steps:**
