@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { BLOOD_PARTICLE_COUNT, MAX_PARTICLES } from "@deashot/game-config";
 
 interface Particle {
   mesh: THREE.Object3D;
@@ -11,28 +12,44 @@ interface Particle {
 /**
  * Lightweight particle effects system.
  * Manages muzzle flashes, bullet impacts, and other visual effects.
+ * Lives behind a hard pool cap (`MAX_PARTICLES`) so burst-heavy fights can't
+ * grow the scene unboundedly (Slice E gate).
  */
 export class Effects {
   private scene: THREE.Scene;
   private particles: Particle[] = [];
 
+  // Shared geometries (scaled per-mesh where size varies) to avoid GC churn.
   private readonly impactGeo = new THREE.SphereGeometry(0.03, 4, 4);
+  private readonly sparkGeo = new THREE.SphereGeometry(0.015, 3, 3);
+  private readonly bloodGeo = new THREE.SphereGeometry(0.02, 4, 4);
+  private readonly flashGeo = new THREE.SphereGeometry(0.06, 6, 6);
   private readonly impactMat = new THREE.MeshBasicMaterial({ color: 0xffaa44 });
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
   }
 
+  /** Current number of live particles (debug/profiling). */
+  getCount(): number {
+    return this.particles.length;
+  }
+
+  /** Adds a particle if the pool isn't at cap; otherwise discards it. */
+  private spawn(p: Particle) {
+    if (this.particles.length >= MAX_PARTICLES) return;
+    this.scene.add(p.mesh);
+    this.particles.push(p);
+  }
+
   /** Show a muzzle flash at the given world position. */
   muzzleFlash(position: THREE.Vector3) {
     const flash = new THREE.Mesh(
-      new THREE.SphereGeometry(0.06, 6, 6),
+      this.flashGeo,
       new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0.9 })
     );
     flash.position.copy(position);
-    this.scene.add(flash);
-
-    this.particles.push({
+    this.spawn({
       mesh: flash,
       velocity: new THREE.Vector3(),
       lifetime: 0.05,
@@ -45,9 +62,7 @@ export class Effects {
   bulletImpact(point: THREE.Vector3, normal: THREE.Vector3) {
     const impact = new THREE.Mesh(this.impactGeo, this.impactMat.clone());
     impact.position.copy(point).addScaledVector(normal, 0.01);
-    this.scene.add(impact);
-
-    this.particles.push({
+    this.spawn({
       mesh: impact,
       velocity: normal.clone().multiplyScalar(2),
       lifetime: 0.3,
@@ -58,11 +73,10 @@ export class Effects {
     // Spawn a few sparks.
     for (let i = 0; i < 3; i++) {
       const spark = new THREE.Mesh(
-        new THREE.SphereGeometry(0.015, 3, 3),
+        this.sparkGeo,
         new THREE.MeshBasicMaterial({ color: 0xff8800 })
       );
       spark.position.copy(point).addScaledVector(normal, 0.02);
-      this.scene.add(spark);
 
       const vel = normal.clone();
       vel.x += (Math.random() - 0.5) * 2;
@@ -70,10 +84,37 @@ export class Effects {
       vel.z += (Math.random() - 0.5) * 2;
       vel.normalize().multiplyScalar(4);
 
-      this.particles.push({
+      this.spawn({
         mesh: spark,
         velocity: vel,
         lifetime: 0.2 + Math.random() * 0.2,
+        maxLifetime: 0.4,
+        gravity: true,
+      });
+    }
+  }
+
+  /** Show a blood burst at the hit point on a struck enemy. */
+  bloodImpact(point: THREE.Vector3, normal: THREE.Vector3) {
+    for (let i = 0; i < BLOOD_PARTICLE_COUNT; i++) {
+      const drop = new THREE.Mesh(
+        this.bloodGeo,
+        new THREE.MeshBasicMaterial({ color: 0xaa1122 })
+      );
+      drop.position.copy(point).addScaledVector(normal, 0.02);
+      drop.scale.setScalar(1 + Math.random());
+
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        Math.random() * 2,
+        (Math.random() - 0.5) * 2
+      );
+      vel.addScaledVector(normal, 2).normalize().multiplyScalar(3 + Math.random() * 2);
+
+      this.spawn({
+        mesh: drop,
+        velocity: vel,
+        lifetime: 0.4,
         maxLifetime: 0.4,
         gravity: true,
       });
@@ -94,9 +135,8 @@ export class Effects {
     dir.normalize();
     streak.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
     streak.position.copy(from);
-    this.scene.add(streak);
 
-    this.particles.push({
+    this.spawn({
       mesh: streak,
       velocity: dir.clone().multiplyScalar(length / lifetime),
       lifetime,

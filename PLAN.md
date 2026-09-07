@@ -511,24 +511,28 @@ Server validates: weapon fire rate, player alive, ammo available, shot possible.
 
 **Steps:**
 
-- [ ] Weapon recoil pattern (visual + mechanical)
-- [ ] Weapon bob while walking
-- [ ] Camera shake on damage
-- [ ] Footstep sounds (positional audio)
-- [ ] Gunshot sounds
-- [ ] Hit sound (satisfying feedback)
-- [ ] Death sound
-- [ ] Ambient map sounds
-- [ ] Muzzle flash improvements (dynamic light)
+- [x] Weapon recoil pattern (visual + mechanical)
+- [x] Weapon bob while walking
+- [x] Camera shake on damage
+- [x] Footstep sounds (positional audio) _(Slice C)_
+- [x] Gunshot sounds _(Slice C)_
+- [x] Hit sound (satisfying feedback) _(Slice C)_
+- [x] Death sound _(Slice C)_
+- [x] Ambient map sounds _(Slice C)_
+- [x] Muzzle flash improvements (dynamic light) _(Slice D)_
+- [x] Remote players flash red when damaged by anyone _(Slice D, in code, playtest pending)_
 - [ ] Bullet tracer visual (optional, for feel)
-- [ ] Blood/hit particle on body hit
-- [ ] Wall impact dust on miss
+- [ ] Blood/hit particle on body hit (Slice A ✅ in code, playtest pending)
+- [ ] Wall impact dust on miss (Slice A ✅ in code, playtest pending)
 - [ ] Improved player model (capsule → low-poly humanoid)
 - [ ] Map improvements (better geometry, textures, lighting)
 - [ ] Smooth camera transitions (spawn, death, respawn)
-- [ ] Damage direction indicator (red arc)
+- [ ] Damage direction indicator (red arc) (Slice A ✅ in code, playtest pending)
 - [ ] Kill cam or death spectate (optional)
-- [ ] Better crosshair (dynamic spread indicator)
+- [x] Better crosshair (dynamic spread indicator)
+- [x] Bounded particle pool (≤ MAX_PARTICLES=400) _(Slice E)_
+- [x] Dev-only on-screen FPS overlay + profiling stats accessors _(Slice E, in code, playtest pending)_
+- [x] `dispose()` cleans up audio context + effects _(Slice E)_
 - [ ] Performance profiling and optimization pass
 
 **Deliverable:** Game feels responsive, looks decent, sounds give feedback.

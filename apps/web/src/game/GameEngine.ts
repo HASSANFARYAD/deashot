@@ -14,6 +14,8 @@ import type {
   ServerDamageEvent,
 } from "./networking/GameSocket";
 import { SERVER_SNAPSHOT_RATE } from "@deashot/shared";
+import { SHAKE_DAMAGE } from "@deashot/game-config";
+import { AudioManager } from "./systems/AudioManager";
 
 export interface ScoreboardEntry {
   id: string;
@@ -30,6 +32,7 @@ export interface GameState {
   reloading: boolean;
   reloadProgress: number;
   crosshairVisible: boolean;
+  crosshairSpread: number;
   /** Online match info (defaults when offline / not yet connected). */
   phase: string;
   timeRemaining: number;
@@ -53,6 +56,9 @@ export interface GameCallbacks {
 /** Tolerance (metres) beyond which the local player snaps to server authority. */
 const RECONCILE_TOLERANCE = 0.5;
 
+/** Upward normal used for far-point "miss" impacts and body-hit dust. */
+const MISS_NORMAL = new THREE.Vector3(0, 1, 0);
+
 export interface GameEngineOptions {
   /** When truthy, connects to the server and renders remote players. */
   socket?: GameSocket;
@@ -68,6 +74,7 @@ export class GameEngine {
   private effects: Effects;
   private collision: CollisionWorld;
   private remote: RemotePlayers;
+  private audio: AudioManager;
   private socket: GameSocket | null;
   private callbacks: GameCallbacks;
   private running = false;
@@ -134,10 +141,12 @@ export class GameEngine {
     this.camera = new FPSCamera();
     this.collision = new CollisionWorld();
     this.player = new PlayerController(this.camera, this.collision);
+    this.player.setFootstepCallback(() => this.audio.play("footstep"));
     this.weapon = new Weapon();
     this.effects = new Effects(this.scene);
     this.remote = new RemotePlayers(this.scene);
     this.remote.setInterpolationDelay(1000 / SERVER_SNAPSHOT_RATE);
+    this.audio = AudioManager.getInstance();
 
     // Attach weapon to camera.
     this.camera.camera.add(this.weapon.group);
@@ -166,6 +175,8 @@ export class GameEngine {
 
     // Pointer lock on click (document-level so overlays/HUD don't block it).
     const onClick = () => {
+      // Must be a user gesture for the Web Audio context.
+      this.audio.ensureContext();
       if (!document.pointerLockElement) {
         this.input.requestPointerLock(container);
       }
@@ -243,14 +254,58 @@ export class GameEngine {
     };
 
     callbacks.onHit = (event) => {
+      // Blood burst + red flash on the remote victim. If the victim is us we
+      // already see the damage-direction UI, so skip the 3D effect.
+      if (event.victimId !== socket.sessionId) {
+        const pos = this.remote.getPosition(event.victimId);
+        if (pos) {
+          this.remote.hitFlash(event.victimId);
+          this.effects.bloodImpact(pos, MISS_NORMAL);
+        }
+      }
+      this.audio.play(event.headshot ? "headshot" : "hit", {
+        pan: this.panFor(event.victimId),
+      });
       this.callbacks.onHit?.(event);
     };
     callbacks.onKill = (event) => {
+      this.audio.play("death", { pan: this.panFor(event.victimId) });
       this.callbacks.onKill?.(event);
     };
     callbacks.onDamage = (event) => {
-      this.callbacks.onDamage?.(event);
+      // A remote victim flashing red from anyone's shots (server broadcasts
+      // per-victim damage to all clients).
+      if (event.targetId !== socket.sessionId) {
+        this.remote.hitFlash(event.targetId, event.amount / 25);
+        return;
+      }
+
+      this.camera.addShake(SHAKE_DAMAGE);
+      this.audio.play("damage", { pan: this.panFor(event.attackerId) });
+
+      // Bearing toward the attacker, relative to the local camera facing.
+      let bearing = 0;
+      const attackerPos = this.remote.getPosition(event.attackerId) ?? this.player.position;
+      const dx = attackerPos.x - this.player.position.x;
+      const dz = attackerPos.z - this.player.position.z;
+      const [fx, fz] = this.camera.getForwardXZ();
+      const signed = Math.atan2(fx * dz - fz * dx, fx * dx + fz * dz);
+      bearing = ((signed % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+      this.callbacks.onDamage?.({ ...event, bearing });
     };
+  }
+
+  /** Stereo pan (-1..1) toward a remote player, relative to camera facing. */
+  private panFor(id: string): number {
+    const pos = this.remote.getPosition(id);
+    if (!pos) return 0;
+    const dx = pos.x - this.player.position.x;
+    const dz = pos.z - this.player.position.z;
+    const [fx, fz] = this.camera.getForwardXZ();
+    const len = Math.hypot(dx, dz);
+    if (len < 0.001) return 0;
+    return Math.max(-1, Math.min(1, (dx * fz - dz * fx) / len));
   }
 
   private emitState() {
@@ -265,6 +320,7 @@ export class GameEngine {
       reloading,
       reloadProgress: ws.reloadProgress,
       crosshairVisible: this.input.pointerLocked,
+      crosshairSpread: this.weapon.getSpread(),
       phase: m?.phase ?? "waiting",
       timeRemaining: m?.timeRemaining ?? 0,
       countdown: m?.countdown ?? 0,
@@ -323,16 +379,32 @@ export class GameEngine {
     }
 
     // Weapon.
-    const shot = this.weapon.update(input, dt, this.camera, (point, normal) => {
-      this.effects.bulletImpact(point, normal);
-    }, () => {
-      // Miss: nothing for now.
-    });
+    const hSpeed = Math.sqrt(
+      this.player.velocity.x * this.player.velocity.x +
+      this.player.velocity.z * this.player.velocity.z
+    );
+    const shot = this.weapon.update(
+      input,
+      dt,
+      this.camera,
+      (point, normal) => {
+        this.effects.bulletImpact(point, normal);
+        this.audio.play("impact");
+      },
+      (point) => {
+        // Miss: the ray passed nothing near — drop subtle dust at the far point.
+        this.effects.bulletImpact(point, MISS_NORMAL);
+      },
+      { hSpeed, grounded: this.player.isGrounded() },
+      (pitch, yaw) => this.camera.addKick(pitch, yaw),
+      () => this.audio.play("reload")
+    );
 
     // Visible tracer + muzzle flash for every shot + send to server.
     if (shot) {
       this.effects.tracer(shot.origin, shot.point);
       this.effects.muzzleFlash(shot.origin);
+      this.audio.play("gunshot");
 
       if (this.socket) {
         const dir = shot.point.clone().sub(shot.origin).normalize();
@@ -357,6 +429,15 @@ export class GameEngine {
     return this.fps;
   }
 
+  /** Debug accessor: live profiling stats for the dev FPS overlay. */
+  getStats(): { fps: number; particles: number; remotePlayers: number } {
+    return {
+      fps: this.fps,
+      particles: this.effects.getCount(),
+      remotePlayers: this.remote.getCount(),
+    };
+  }
+
   /** Debug/testing accessor: local player's world position. */
   getLocalPosition(): { x: number; y: number; z: number } {
     return {
@@ -376,10 +457,13 @@ export class GameEngine {
     return this.socket?.connected ?? false;
   }
 
-  /** Apply user settings that affect the engine (mouse sensitivity). */
-  applySettings(settings: { sensitivity?: number }) {
+  /** Apply user settings that affect the engine (mouse sensitivity, volume). */
+  applySettings(settings: { sensitivity?: number; volume?: number }) {
     if (typeof settings.sensitivity === "number") {
       this.camera.setSensitivity(settings.sensitivity);
+    }
+    if (typeof settings.volume === "number") {
+      this.audio.setMasterVolume(settings.volume);
     }
   }
 
@@ -390,6 +474,7 @@ export class GameEngine {
     this.remote.dispose();
     this.socket?.leave();
     this.effects.dispose();
+    this.audio.dispose();
     this.renderer.setAnimationLoop(null);
     this.input.dispose();
     this.renderer.domElement.remove();

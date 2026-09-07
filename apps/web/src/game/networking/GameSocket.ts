@@ -65,6 +65,8 @@ export interface ServerDamageEvent {
   amount: number;
   headshot: boolean;
   newHealth: number;
+  /** Client-only: relative bearing (radians, 0 = in front) toward the attacker. */
+  bearing?: number;
 }
 
 export interface GameSocketCallbacks {

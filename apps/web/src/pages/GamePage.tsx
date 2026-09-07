@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import type { GameState } from "../game/GameEngine";
 import type { ServerHitEvent, ServerKillEvent, ServerDamageEvent } from "../game/Game";
+import type { GameEngine } from "../game/Game";
 import { createGame } from "../game/Game";
 import type { ProfileSettings } from "../settings/api";
 import { HUD } from "../components/HUD/HUD";
@@ -10,6 +11,7 @@ import { MatchEnd } from "../components/HUD/MatchEnd";
 import { Lobby } from "../components/HUD/Lobby";
 import { LoadingOverlay } from "../components/HUD/LoadingOverlay";
 import { PauseMenu } from "../components/HUD/PauseMenu";
+import { FPSOverlay } from "../components/HUD/FPSOverlay";
 
 interface GamePageProps {
   onExit: () => void;
@@ -27,7 +29,8 @@ export function GamePage({
   onSaveSettings,
 }: GamePageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const engineRef = useRef<{ dispose: () => void } | null>(null);
+  const engineRef = useRef<{ dispose: () => void; getEngine: () => GameEngine } | null>(null);
+  const volumeRef = useRef(settings.volume);
   const [playSession, setPlaySession] = useState(0);
   const [gameState, setGameState] = useState<GameState>({
     health: 100,
@@ -35,6 +38,7 @@ export function GamePage({
     reloading: false,
     reloadProgress: 0,
     crosshairVisible: false,
+    crosshairSpread: 0,
     phase: "waiting",
     timeRemaining: 0,
     countdown: 0,
@@ -50,7 +54,7 @@ export function GamePage({
   const [scoreboardOpen, setScoreboardOpen] = useState(false);
   const [paused, setPaused] = useState(false);
   const [hitMarker, setHitMarker] = useState<{ active: boolean; headshot: boolean }>({ active: false, headshot: false });
-  const [damageIndicator, setDamageIndicator] = useState<{ active: boolean; amount: number; headshot: boolean }>({ active: false, amount: 0, headshot: false });
+  const [damageIndicator, setDamageIndicator] = useState<{ active: boolean; amount: number; headshot: boolean; bearing: number }>({ active: false, amount: 0, headshot: false, bearing: 0 });
   const [killFeed, setKillFeed] = useState<Array<{ id: string; killer: string; killerTeam: string; victim: string; victimTeam: string; headshot: boolean; timestamp: number }>>([]);
 
   const handleHit = useCallback((event: ServerHitEvent) => {
@@ -74,8 +78,8 @@ export function GamePage({
   }, []);
 
   const handleDamage = useCallback((event: ServerDamageEvent) => {
-    setDamageIndicator({ active: true, amount: event.amount, headshot: event.headshot });
-    setTimeout(() => setDamageIndicator({ active: false, amount: 0, headshot: false }), 500);
+    setDamageIndicator({ active: true, amount: event.amount, headshot: event.headshot, bearing: event.bearing ?? 0 });
+    setTimeout(() => setDamageIndicator({ active: false, amount: 0, headshot: false, bearing: 0 }), 500);
   }, []);
 
   useEffect(() => {
@@ -95,7 +99,7 @@ export function GamePage({
 
     // Apply the player's saved settings to the engine (sensitivity).
     const engine = game.getEngine();
-    engine.applySettings({ sensitivity: settings.sensitivity });
+    engine.applySettings({ sensitivity: settings.sensitivity, volume: volumeRef.current });
     engineRef.current = game;
 
     // Expose for automated browser tests (Playwright) to introspect the scene.
@@ -126,10 +130,16 @@ export function GamePage({
     };
   }, [online, token, settings.sensitivity, handleHit, handleKill, handleDamage, playSession]);
 
+  // Volume changes apply live without recreating the game.
+  useEffect(() => {
+    volumeRef.current = settings.volume;
+    engineRef.current?.getEngine().applySettings({ volume: settings.volume });
+  }, [settings.volume]);
+
   const handlePlayAgain = useCallback(() => {
     setKillFeed([]);
     setHitMarker({ active: false, headshot: false });
-    setDamageIndicator({ active: false, amount: 0, headshot: false });
+    setDamageIndicator({ active: false, amount: 0, headshot: false, bearing: 0 });
     setScoreboardOpen(false);
     setPaused(false);
     setPlaySession((s) => s + 1);
@@ -230,6 +240,9 @@ export function GamePage({
           </button>
         </div>
       )}
+
+      {/* Dev-only performance readout (present in dev/preview builds). */}
+      {import.meta.env.DEV && <FPSOverlay engineRef={engineRef} />}
     </div>
   );
 }
