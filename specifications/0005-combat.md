@@ -155,14 +155,16 @@ Regression test: `apps/web/scripts/test-shot-validation.cjs` fires three
 bursts — spoofed aim, spoofed origin, and an honest shot — asserting the first
 two deal no damage and the third still does.
 
+Wall occlusion regression: `apps/web/scripts/test-wall-occlusion.cjs` fires an
+honest burst at a target on the far side of the central cover block, asserting
+zero damage, then a second burst down an open lane, asserting damage still
+lands (audit P0-2).
+
 ## Out of scope (Phase 3)
 
 - Scoreboard, kill attribution/assists, match lifecycle → Phase 4.
 - Recoil spread applied server-side (visual only this phase) → polish.
 - Lag compensation / rewind hit validation → later.
-- **World-geometry occlusion.** The server still raycasts only against player
-  capsules, so cover does not block shots. Tracked as audit P0-2; lands with
-  the shared client/server collision module.
 
 ---
 
@@ -176,3 +178,9 @@ two deal no damage and the third still does.
   telemetry only. Adds `SHOT_AIM_TOLERANCE` / `SHOT_ORIGIN_TOLERANCE` to
   `@deashot/game-config` and `lookVectorFromYawPitch` to `@deashot/math`.
   Records world-geometry occlusion as a known gap.
+- v1.2 — World-geometry occlusion (audit P0-2, P0-3). `MAP_COLLIDERS` in
+  `@deashot/game-config` becomes the single shared collider list (4 walls + 11
+  cover); `raycastAABB` / `resolveAABB` gate server hitscan and movement, and
+  the client uses the same colliders for hitscan + renderer. `handleShoot`
+  tests world geometry first and discards any player hit farther than the
+  nearest wall. Removes the world-geometry out-of-scope note.
