@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { BLOOD_PARTICLE_COUNT } from "@deashot/game-config";
 
 interface Particle {
   mesh: THREE.Object3D;
@@ -74,6 +75,33 @@ export class Effects {
         mesh: spark,
         velocity: vel,
         lifetime: 0.2 + Math.random() * 0.2,
+        maxLifetime: 0.4,
+        gravity: true,
+      });
+    }
+  }
+
+  /** Show a blood burst at the hit point on a struck enemy. */
+  bloodImpact(point: THREE.Vector3, normal: THREE.Vector3) {
+    for (let i = 0; i < BLOOD_PARTICLE_COUNT; i++) {
+      const drop = new THREE.Mesh(
+        new THREE.SphereGeometry(0.02 + Math.random() * 0.02, 4, 4),
+        new THREE.MeshBasicMaterial({ color: 0xaa1122 })
+      );
+      drop.position.copy(point).addScaledVector(normal, 0.02);
+      this.scene.add(drop);
+
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        Math.random() * 2,
+        (Math.random() - 0.5) * 2
+      );
+      vel.addScaledVector(normal, 2).normalize().multiplyScalar(3 + Math.random() * 2);
+
+      this.particles.push({
+        mesh: drop,
+        velocity: vel,
+        lifetime: 0.4,
         maxLifetime: 0.4,
         gravity: true,
       });

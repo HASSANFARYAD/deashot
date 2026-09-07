@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { SnapshotPlayer } from "../networking/GameSocket";
+import { HIT_FLASH_DURATION } from "@deashot/game-config";
 
 /**
  * Renders and interpolates remote players from server snapshots.
@@ -21,9 +22,11 @@ interface Sample {
 
 interface Entry {
   mesh: THREE.Group;
+  bodyMat: THREE.MeshStandardMaterial;
   healthBar: THREE.Mesh;
   samples: Sample[];
   last: SnapshotPlayer;
+  hitFlashUntil: number;
 }
 
 const MAX_SAMPLES = 8;
@@ -71,6 +74,7 @@ export class RemotePlayers {
     const bodyMat = new THREE.MeshStandardMaterial({
       color: player.team === "red" ? 0xdd3344 : 0x3355dd,
     });
+    bodyMat.emissive = new THREE.Color(0x000000);
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.4, 0.6), bodyMat);
     body.position.y = 0.7;
     group.add(body);
@@ -84,7 +88,7 @@ export class RemotePlayers {
     group.add(healthBar);
 
     this.scene.add(group);
-    this.players.set(sessionId, { mesh: group, healthBar, samples: [], last: player });
+    this.players.set(sessionId, { mesh: group, bodyMat, healthBar, samples: [], last: player, hitFlashUntil: 0 });
   }
 
   update(sessionId: string, player: SnapshotPlayer, nowMs: number) {
@@ -117,6 +121,20 @@ export class RemotePlayers {
     this.players.delete(sessionId);
   }
 
+  /** Get the current interpolated world position of a remote player. */
+  getPosition(sessionId: string): THREE.Vector3 | null {
+    const entry = this.players.get(sessionId);
+    if (!entry) return null;
+    return entry.mesh.position.clone();
+  }
+
+  /** Briefly tint a remote player's body red to signal a hit. */
+  hitFlash(sessionId: string) {
+    const entry = this.players.get(sessionId);
+    if (!entry) return;
+    entry.hitFlashUntil = performance.now() / 1000 + HIT_FLASH_DURATION;
+  }
+
   /**
    * Advance remote players each frame. Positions are evaluated at
    * `interpDelay` ms behind the local clock (so the server snapshot has time
@@ -124,7 +142,12 @@ export class RemotePlayers {
    */
   updateFrame(nowMs: number) {
     const renderTime = nowMs - this.interpDelay;
-    for (const { mesh, samples } of this.players.values()) {
+    for (const { mesh, bodyMat, samples, hitFlashUntil } of this.players.values()) {
+      // Decay hit-flash emissive tint.
+      const flashLeft = hitFlashUntil - nowMs / 1000;
+      const emissive = flashLeft > 0 ? Math.max(0, flashLeft / HIT_FLASH_DURATION) : 0;
+      bodyMat.emissive.setRGB(emissive, 0, 0);
+
       if (samples.length < 2) {
         const s = samples[samples.length - 1];
         if (s) mesh.position.set(s.x, s.y, s.z);

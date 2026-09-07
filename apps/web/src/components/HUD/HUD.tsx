@@ -11,7 +11,7 @@ interface HUDProps {
   state: GameState;
   crosshairColor?: string;
   hitMarker: { active: boolean; headshot: boolean };
-  damageIndicator: { active: boolean; amount: number; headshot: boolean };
+  damageIndicator: { active: boolean; amount: number; headshot: boolean; bearing: number };
   killFeed: Array<{ id: string; killer: string; killerTeam: string; victim: string; victimTeam: string; headshot: boolean; timestamp: number }>;
 }
 
@@ -27,7 +27,7 @@ export const HUD: React.FC<HUDProps> = ({ state, crosshairColor, hitMarker, dama
     <>
       <Crosshair visible={state.crosshairVisible} color={crosshairColor} />
       <HitMarker visible={hitMarker.active} headshot={hitMarker.headshot} />
-      <DamageIndicator visible={damageIndicator.active} amount={damageIndicator.amount} headshot={damageIndicator.headshot} />
+      <DamageIndicator visible={damageIndicator.active} amount={damageIndicator.amount} headshot={damageIndicator.headshot} bearing={damageIndicator.bearing} />
       <KillFeed entries={killFeed} />
       <div style={styles.topCenter}>
         <span style={{ ...styles.teamScore, color: "#5599ff" }}>{state.blueScore}</span>

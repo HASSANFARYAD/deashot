@@ -521,12 +521,12 @@ Server validates: weapon fire rate, player alive, ammo available, shot possible.
 - [ ] Ambient map sounds
 - [ ] Muzzle flash improvements (dynamic light)
 - [ ] Bullet tracer visual (optional, for feel)
-- [ ] Blood/hit particle on body hit
-- [ ] Wall impact dust on miss
+- [ ] Blood/hit particle on body hit (Slice A ✅ in code, playtest pending)
+- [ ] Wall impact dust on miss (Slice A ✅ in code, playtest pending)
 - [ ] Improved player model (capsule → low-poly humanoid)
 - [ ] Map improvements (better geometry, textures, lighting)
 - [ ] Smooth camera transitions (spawn, death, respawn)
-- [ ] Damage direction indicator (red arc)
+- [ ] Damage direction indicator (red arc) (Slice A ✅ in code, playtest pending)
 - [ ] Kill cam or death spectate (optional)
 - [ ] Better crosshair (dynamic spread indicator)
 - [ ] Performance profiling and optimization pass

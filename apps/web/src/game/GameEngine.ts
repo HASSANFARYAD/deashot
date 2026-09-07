@@ -53,6 +53,9 @@ export interface GameCallbacks {
 /** Tolerance (metres) beyond which the local player snaps to server authority. */
 const RECONCILE_TOLERANCE = 0.5;
 
+/** Upward normal used for far-point "miss" impacts and body-hit dust. */
+const MISS_NORMAL = new THREE.Vector3(0, 1, 0);
+
 export interface GameEngineOptions {
   /** When truthy, connects to the server and renders remote players. */
   socket?: GameSocket;
@@ -243,13 +246,34 @@ export class GameEngine {
     };
 
     callbacks.onHit = (event) => {
+      // Blood burst + red flash on the remote victim. If the victim is us we
+      // already see the damage-direction UI, so skip the 3D effect.
+      if (event.victimId !== socket.sessionId) {
+        const pos = this.remote.getPosition(event.victimId);
+        if (pos) {
+          this.remote.hitFlash(event.victimId);
+          this.effects.bloodImpact(pos, MISS_NORMAL);
+        }
+      }
       this.callbacks.onHit?.(event);
     };
     callbacks.onKill = (event) => {
       this.callbacks.onKill?.(event);
     };
     callbacks.onDamage = (event) => {
-      this.callbacks.onDamage?.(event);
+      // Only the actual victim sees the damage-direction UI.
+      if (event.targetId !== socket.sessionId) return;
+
+      // Bearing toward the attacker, relative to the local camera facing.
+      let bearing = 0;
+      const attackerPos = this.remote.getPosition(event.attackerId) ?? this.player.position;
+      const dx = attackerPos.x - this.player.position.x;
+      const dz = attackerPos.z - this.player.position.z;
+      const [fx, fz] = this.camera.getForwardXZ();
+      const signed = Math.atan2(fx * dz - fz * dx, fx * dx + fz * dz);
+      bearing = ((signed % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+      this.callbacks.onDamage?.({ ...event, bearing });
     };
   }
 
@@ -325,8 +349,9 @@ export class GameEngine {
     // Weapon.
     const shot = this.weapon.update(input, dt, this.camera, (point, normal) => {
       this.effects.bulletImpact(point, normal);
-    }, () => {
-      // Miss: nothing for now.
+    }, (point) => {
+      // Miss: the ray passed nothing near — drop subtle dust at the far point.
+      this.effects.bulletImpact(point, MISS_NORMAL);
     });
 
     // Visible tracer + muzzle flash for every shot + send to server.

@@ -50,7 +50,7 @@ export function GamePage({
   const [scoreboardOpen, setScoreboardOpen] = useState(false);
   const [paused, setPaused] = useState(false);
   const [hitMarker, setHitMarker] = useState<{ active: boolean; headshot: boolean }>({ active: false, headshot: false });
-  const [damageIndicator, setDamageIndicator] = useState<{ active: boolean; amount: number; headshot: boolean }>({ active: false, amount: 0, headshot: false });
+  const [damageIndicator, setDamageIndicator] = useState<{ active: boolean; amount: number; headshot: boolean; bearing: number }>({ active: false, amount: 0, headshot: false, bearing: 0 });
   const [killFeed, setKillFeed] = useState<Array<{ id: string; killer: string; killerTeam: string; victim: string; victimTeam: string; headshot: boolean; timestamp: number }>>([]);
 
   const handleHit = useCallback((event: ServerHitEvent) => {
@@ -74,8 +74,8 @@ export function GamePage({
   }, []);
 
   const handleDamage = useCallback((event: ServerDamageEvent) => {
-    setDamageIndicator({ active: true, amount: event.amount, headshot: event.headshot });
-    setTimeout(() => setDamageIndicator({ active: false, amount: 0, headshot: false }), 500);
+    setDamageIndicator({ active: true, amount: event.amount, headshot: event.headshot, bearing: event.bearing ?? 0 });
+    setTimeout(() => setDamageIndicator({ active: false, amount: 0, headshot: false, bearing: 0 }), 500);
   }, []);
 
   useEffect(() => {
@@ -129,7 +129,7 @@ export function GamePage({
   const handlePlayAgain = useCallback(() => {
     setKillFeed([]);
     setHitMarker({ active: false, headshot: false });
-    setDamageIndicator({ active: false, amount: 0, headshot: false });
+    setDamageIndicator({ active: false, amount: 0, headshot: false, bearing: 0 });
     setScoreboardOpen(false);
     setPaused(false);
     setPlaySession((s) => s + 1);
