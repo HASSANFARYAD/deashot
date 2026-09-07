@@ -25,7 +25,7 @@ function formatTime(sec: number): string {
 export const HUD: React.FC<HUDProps> = ({ state, crosshairColor, hitMarker, damageIndicator, killFeed }) => {
   return (
     <>
-      <Crosshair visible={state.crosshairVisible} color={crosshairColor} />
+      <Crosshair visible={state.crosshairVisible} color={crosshairColor} spread={state.crosshairSpread} />
       <HitMarker visible={hitMarker.active} headshot={hitMarker.headshot} />
       <DamageIndicator visible={damageIndicator.active} amount={damageIndicator.amount} headshot={damageIndicator.headshot} bearing={damageIndicator.bearing} />
       <KillFeed entries={killFeed} />

@@ -14,6 +14,7 @@ import type {
   ServerDamageEvent,
 } from "./networking/GameSocket";
 import { SERVER_SNAPSHOT_RATE } from "@deashot/shared";
+import { SHAKE_DAMAGE } from "@deashot/game-config";
 
 export interface ScoreboardEntry {
   id: string;
@@ -30,6 +31,7 @@ export interface GameState {
   reloading: boolean;
   reloadProgress: number;
   crosshairVisible: boolean;
+  crosshairSpread: number;
   /** Online match info (defaults when offline / not yet connected). */
   phase: string;
   timeRemaining: number;
@@ -264,6 +266,8 @@ export class GameEngine {
       // Only the actual victim sees the damage-direction UI.
       if (event.targetId !== socket.sessionId) return;
 
+      this.camera.addShake(SHAKE_DAMAGE);
+
       // Bearing toward the attacker, relative to the local camera facing.
       let bearing = 0;
       const attackerPos = this.remote.getPosition(event.attackerId) ?? this.player.position;
@@ -289,6 +293,7 @@ export class GameEngine {
       reloading,
       reloadProgress: ws.reloadProgress,
       crosshairVisible: this.input.pointerLocked,
+      crosshairSpread: this.weapon.getSpread(),
       phase: m?.phase ?? "waiting",
       timeRemaining: m?.timeRemaining ?? 0,
       countdown: m?.countdown ?? 0,
@@ -347,12 +352,24 @@ export class GameEngine {
     }
 
     // Weapon.
-    const shot = this.weapon.update(input, dt, this.camera, (point, normal) => {
-      this.effects.bulletImpact(point, normal);
-    }, (point) => {
-      // Miss: the ray passed nothing near — drop subtle dust at the far point.
-      this.effects.bulletImpact(point, MISS_NORMAL);
-    });
+    const hSpeed = Math.sqrt(
+      this.player.velocity.x * this.player.velocity.x +
+      this.player.velocity.z * this.player.velocity.z
+    );
+    const shot = this.weapon.update(
+      input,
+      dt,
+      this.camera,
+      (point, normal) => {
+        this.effects.bulletImpact(point, normal);
+      },
+      (point) => {
+        // Miss: the ray passed nothing near — drop subtle dust at the far point.
+        this.effects.bulletImpact(point, MISS_NORMAL);
+      },
+      { hSpeed, grounded: this.player.isGrounded() },
+      (pitch, yaw) => this.camera.addKick(pitch, yaw)
+    );
 
     // Visible tracer + muzzle flash for every shot + send to server.
     if (shot) {

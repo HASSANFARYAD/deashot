@@ -1,5 +1,13 @@
 import * as THREE from "three";
-import { ASSAULT_RIFLE, MAP_COLLIDERS } from "@deashot/game-config";
+import {
+  ASSAULT_RIFLE,
+  MAP_COLLIDERS,
+  PLAYER_SPEED,
+  BOB_FREQ,
+  BOB_AMP,
+  RECOIL_PITCH,
+  RECOIL_YAW,
+} from "@deashot/game-config";
 import type { FPSCamera } from "./FPSCamera";
 import type { InputState } from "./InputManager";
 
@@ -10,6 +18,12 @@ export interface WeaponState {
   reloadProgress: number;
   lastFireTime: number;
   canFire: boolean;
+}
+
+export interface ShootEvent {
+  type: "shoot";
+  origin: THREE.Vector3;
+  point: THREE.Vector3;
 }
 
 export class Weapon {
@@ -23,6 +37,9 @@ export class Weapon {
   private muzzlePoint: THREE.PointLight;
   private recoilOffset = 0;
   private aimAmount = 0;
+  private moveHSpeed = 0;
+  private bobPhase = 0;
+  private bobAmount = 0;
 
   /** Visual model of the weapon (attached to camera). */
   readonly group: THREE.Group;
@@ -92,24 +109,49 @@ export class Weapon {
     };
   }
 
+  /** Normalized (0..1) crosshair spread for the HUD. */
+  getSpread(): number {
+    const timeSinceShot = performance.now() / 1000 - this.lastFireTime;
+    const bloom =
+      this.lastFireTime > 0 && timeSinceShot < 0.25
+        ? (1 - timeSinceShot / 0.25) * 0.02
+        : 0;
+    const moveFactor = Math.min(1, this.moveHSpeed / PLAYER_SPEED) * 0.02;
+    const raw =
+      (this.stats.spread + moveFactor + bloom) * (1 - 0.5 * this.aimAmount);
+    return Math.max(0, Math.min(1, raw / 0.08));
+  }
+
   /** Process input, update weapon state. Returns shoot event or null. */
   update(
     input: InputState,
     dt: number,
     _camera: FPSCamera,
     onHit: (point: THREE.Vector3, normal: THREE.Vector3) => void,
-    _onMiss: (point: THREE.Vector3) => void
-  ): { type: "shoot"; origin: THREE.Vector3; point: THREE.Vector3 } | null {
+    _onMiss: (point: THREE.Vector3) => void,
+    move: { hSpeed: number; grounded: boolean },
+    onKick?: (pitch: number, yaw: number) => void
+  ): ShootEvent | null {
     const now = performance.now() / 1000;
-    let shootEvent: { type: "shoot"; origin: THREE.Vector3; point: THREE.Vector3 } | null = null;
+    let shootEvent: ShootEvent | null = null;
+    this.moveHSpeed = move.hSpeed;
 
     // ADS: move gun toward center screen when aiming.
     const aimTarget = input.aim ? 1 : 0;
     this.aimAmount += (aimTarget - this.aimAmount) * Math.min(1, dt * 12);
     if (Math.abs(this.aimAmount - aimTarget) < 0.01) this.aimAmount = aimTarget;
+
+    // Weapon bob while walking (suppressed while ADS / airborne / still).
+    const bobEnabled = !input.aim && move.grounded && move.hSpeed >= 0.1;
+    if (bobEnabled) this.bobPhase += move.hSpeed * dt * BOB_FREQ;
+    this.bobAmount += ((bobEnabled ? 1 : 0) - this.bobAmount) * Math.min(1, dt * 10);
+    const bobX = Math.sin(this.bobPhase) * BOB_AMP * this.bobAmount;
+    const bobY = Math.abs(Math.cos(this.bobPhase)) * BOB_AMP * this.bobAmount;
+
     const resting = new THREE.Vector3(0.25, -0.22, -0.45);
     const ads = new THREE.Vector3(0, -0.14, -0.33);
-    this.group.position.copy(resting).lerp(ads, this.aimAmount);
+    const base = resting.clone().lerp(ads, this.aimAmount);
+    this.group.position.set(base.x + bobX, base.y + bobY, base.z);
 
     // Reload.
     if (this.reloading) {
@@ -146,6 +188,7 @@ export class Weapon {
 
       // Recoil visual.
       this.recoilOffset = 0.03;
+      onKick?.(RECOIL_PITCH, (Math.random() - 0.5) * 2 * RECOIL_YAW);
 
       // Hitscan from camera center.
       const ray = new THREE.Ray();

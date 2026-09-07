@@ -1,9 +1,11 @@
 import * as THREE from "three";
 import { clamp, normalizeAngle } from "@deashot/math";
-import { EYE_HEIGHT, PITCH_LIMIT } from "@deashot/game-config";
+import { EYE_HEIGHT, PITCH_LIMIT, SHAKE_FIRE } from "@deashot/game-config";
 import type { InputState } from "./InputManager";
 
 const MOUSE_SENSITIVITY = 0.003;
+const RECOIL_DECAY = 8;
+const SHAKE_DECAY = 6;
 
 const BASE_FOV = 75;
 const AIM_FOV = 45;
@@ -15,6 +17,11 @@ export class FPSCamera {
   private pitch = 0;
   private fov = BASE_FOV;
   private sensitivity = 1;
+  private recoilPitch = 0;
+  private recoilYaw = 0;
+  private shake = 0;
+  private shakeX = 0;
+  private shakeY = 0;
 
   constructor() {
     this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 500);
@@ -38,6 +45,18 @@ export class FPSCamera {
     );
   }
 
+  /** Kick the camera by a recoil offset (radians) plus a small fire shake. */
+  addKick(pitch: number, yaw: number) {
+    this.recoilPitch += pitch;
+    this.recoilYaw += yaw;
+    this.shake = Math.min(1, this.shake + SHAKE_FIRE);
+  }
+
+  /** Add screen shake (0..1 scale). Used when the player takes damage. */
+  addShake(amount: number) {
+    this.shake = Math.min(1, this.shake + amount);
+  }
+
   /** Set aspect ratio on resize. */
   setAspect(width: number, height: number) {
     this.camera.aspect = width / height;
@@ -55,12 +74,32 @@ export class FPSCamera {
     }
   }
 
-  /** Position camera at the player's eye height and apply rotation. */
-  update(playerX: number, playerY: number, playerZ: number) {
+  /** Position camera at the player's eye height, apply rotation + recoil/shake. */
+  update(playerX: number, playerY: number, playerZ: number, dt = 0.016) {
     this.camera.position.set(playerX, playerY + EYE_HEIGHT, playerZ);
 
-    const euler = new THREE.Euler(this.pitch, this.yaw, 0, "YXZ");
+    // Fresh per-frame jitter whenever shake is active.
+    if (this.shake > 0) {
+      this.shakeX = (Math.random() * 2 - 1) * this.shake;
+      this.shakeY = (Math.random() * 2 - 1) * this.shake;
+    } else {
+      this.shakeX = 0;
+      this.shakeY = 0;
+    }
+
+    const euler = new THREE.Euler(
+      this.pitch + this.recoilPitch + this.shakeY,
+      this.yaw + this.recoilYaw + this.shakeX,
+      0,
+      "YXZ"
+    );
     this.camera.quaternion.setFromEuler(euler);
+
+    // Decay recoil kick and shake.
+    this.recoilPitch *= Math.exp(-RECOIL_DECAY * dt);
+    this.recoilYaw *= Math.exp(-RECOIL_DECAY * dt);
+    this.shake *= Math.exp(-SHAKE_DECAY * dt);
+    if (this.shake < 0.0005) this.shake = 0;
   }
 
   /** Get the camera's forward direction in world space (horizontal only). */

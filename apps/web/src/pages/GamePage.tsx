@@ -35,6 +35,7 @@ export function GamePage({
     reloading: false,
     reloadProgress: 0,
     crosshairVisible: false,
+    crosshairSpread: 0,
     phase: "waiting",
     timeRemaining: 0,
     countdown: 0,

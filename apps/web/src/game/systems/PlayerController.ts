@@ -111,7 +111,11 @@ export class PlayerController {
     }
 
     // Update camera.
-    this.camera.update(this.position.x, this.position.y, this.position.z);
+    this.camera.update(this.position.x, this.position.y, this.position.z, dt);
+  }
+
+  isGrounded(): boolean {
+    return this.grounded;
   }
 
   spawn(x: number, y: number, z: number) {

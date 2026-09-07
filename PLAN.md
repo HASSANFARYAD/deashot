@@ -511,9 +511,9 @@ Server validates: weapon fire rate, player alive, ammo available, shot possible.
 
 **Steps:**
 
-- [ ] Weapon recoil pattern (visual + mechanical)
-- [ ] Weapon bob while walking
-- [ ] Camera shake on damage
+- [x] Weapon recoil pattern (visual + mechanical)
+- [x] Weapon bob while walking
+- [x] Camera shake on damage
 - [ ] Footstep sounds (positional audio)
 - [ ] Gunshot sounds
 - [ ] Hit sound (satisfying feedback)
@@ -528,7 +528,7 @@ Server validates: weapon fire rate, player alive, ammo available, shot possible.
 - [ ] Smooth camera transitions (spawn, death, respawn)
 - [ ] Damage direction indicator (red arc) (Slice A ✅ in code, playtest pending)
 - [ ] Kill cam or death spectate (optional)
-- [ ] Better crosshair (dynamic spread indicator)
+- [x] Better crosshair (dynamic spread indicator)
 - [ ] Performance profiling and optimization pass
 
 **Deliverable:** Game feels responsive, looks decent, sounds give feedback.
