@@ -22,6 +22,9 @@ export const MUZZLE_FLASH_DURATION = 0.05
 export const MUZZLE_FLASH_LIGHT = 14
 export const MUZZLE_FLASH_SPRITE_SCALE = 0.35
 
+// --- Performance ---
+export const MAX_PARTICLES = 400
+
 // --- Audio ---
 export const VOLUME_MASTER = 0.8
 export const VOLUME_SFX = 0.7

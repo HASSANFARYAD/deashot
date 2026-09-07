@@ -429,6 +429,15 @@ export class GameEngine {
     return this.fps;
   }
 
+  /** Debug accessor: live profiling stats for the dev FPS overlay. */
+  getStats(): { fps: number; particles: number; remotePlayers: number } {
+    return {
+      fps: this.fps,
+      particles: this.effects.getCount(),
+      remotePlayers: this.remote.getCount(),
+    };
+  }
+
   /** Debug/testing accessor: local player's world position. */
   getLocalPosition(): { x: number; y: number; z: number } {
     return {
@@ -465,6 +474,7 @@ export class GameEngine {
     this.remote.dispose();
     this.socket?.leave();
     this.effects.dispose();
+    this.audio.dispose();
     this.renderer.setAnimationLoop(null);
     this.input.dispose();
     this.renderer.domElement.remove();

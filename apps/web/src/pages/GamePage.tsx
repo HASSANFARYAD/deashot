@@ -11,6 +11,7 @@ import { MatchEnd } from "../components/HUD/MatchEnd";
 import { Lobby } from "../components/HUD/Lobby";
 import { LoadingOverlay } from "../components/HUD/LoadingOverlay";
 import { PauseMenu } from "../components/HUD/PauseMenu";
+import { FPSOverlay } from "../components/HUD/FPSOverlay";
 
 interface GamePageProps {
   onExit: () => void;
@@ -239,6 +240,9 @@ export function GamePage({
           </button>
         </div>
       )}
+
+      {/* Dev-only performance readout (present in dev/preview builds). */}
+      {import.meta.env.DEV && <FPSOverlay engineRef={engineRef} />}
     </div>
   );
 }

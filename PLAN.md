@@ -530,6 +530,9 @@ Server validates: weapon fire rate, player alive, ammo available, shot possible.
 - [ ] Damage direction indicator (red arc) (Slice A ✅ in code, playtest pending)
 - [ ] Kill cam or death spectate (optional)
 - [x] Better crosshair (dynamic spread indicator)
+- [x] Bounded particle pool (≤ MAX_PARTICLES=400) _(Slice E)_
+- [x] Dev-only on-screen FPS overlay + profiling stats accessors _(Slice E, in code, playtest pending)_
+- [x] `dispose()` cleans up audio context + effects _(Slice E)_
 - [ ] Performance profiling and optimization pass
 
 **Deliverable:** Game feels responsive, looks decent, sounds give feedback.

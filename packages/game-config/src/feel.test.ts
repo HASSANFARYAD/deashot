@@ -12,6 +12,7 @@ import {
   MUZZLE_FLASH_DURATION,
   MUZZLE_FLASH_LIGHT,
   MUZZLE_FLASH_SPRITE_SCALE,
+  MAX_PARTICLES,
   VOLUME_MASTER,
   VOLUME_SFX,
   VOLUME_AMBIENT,
@@ -75,6 +76,12 @@ describe("feel constants", () => {
     expect(Number.isFinite(MUZZLE_FLASH_SPRITE_SCALE)).toBe(true);
     expect(MUZZLE_FLASH_SPRITE_SCALE).toBeGreaterThan(0.05);
     expect(MUZZLE_FLASH_SPRITE_SCALE).toBeLessThan(1);
+  });
+
+  it("bounds the particle pool", () => {
+    expect(Number.isInteger(MAX_PARTICLES)).toBe(true);
+    expect(MAX_PARTICLES).toBeGreaterThanOrEqual(200);
+    expect(MAX_PARTICLES).toBeLessThanOrEqual(400);
   });
 
   describe("audio volumes", () => {
