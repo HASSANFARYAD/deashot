@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@colyseus/redis-presence": "^0.18.3",
     "@colyseus/schema": "^2.0.37",
+    "@colyseus/ws-transport": "^0.18.2",
     "@deashot/game-config": "workspace:*",
     "@deashot/math": "workspace:*",
     "@deashot/shared": "workspace:*",

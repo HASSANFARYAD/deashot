@@ -120,7 +120,11 @@ export class GameSocket {
   readonly callbacks: GameSocketCallbacks;
 
   constructor(callbacks: GameSocketCallbacks = {}, token?: string) {
-    this.client = new Client("ws://localhost:2567");
+    // Production compose injects VITE_SERVER_URL (e.g. ws://<host>/ws through
+    // nginx). Dev and the integration harness fall back to the local server.
+    this.client = new Client(
+      import.meta.env.VITE_SERVER_URL || "ws://localhost:2567"
+    );
     this.callbacks = callbacks;
     if (token) this.client.auth.token = token;
   }
