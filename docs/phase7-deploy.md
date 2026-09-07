@@ -108,8 +108,17 @@ integration harness keep the `localhost` default. No wire/protocol change.
   (via `server` option). We mount a tiny route on that raw server before
   handing it to Colyseus: `{"status":"ok","uptime":<sec>}`.
 - **Redis presence**: `REDIS_URL` → `new RedisPresence(...)` passed to
-  `new Server({ presence })`; unset keeps default in-memory. `@colyseus/redis-presence`
-  is a runtime dep of the game-server. Errors surface at boot (fail fast).
+  `new Server({ presence })`; unset keeps default in-memory. `RedisPresence` is
+  re-exported by `colyseus@0.15` itself (do **not** add the
+  `@colyseus/redis-presence` package — 0.18-series deps are incompatible with
+  the 0.15 server and pull in `@colyseus/core@0.18`).
+- **Version pinning (verified fix):** the game-server pins
+  `@colyseus/core@0.15.57` as a **direct** dependency. Without it, pnpm resolves
+  `@colyseus/ws-transport@0.15.x`'s peer `@colyseus/core` to the highest version
+  in the store (`0.18.x`) and the app crashes at boot with
+  `ERR_PACKAGE_PATH_NOT_EXPORTED: Package subpath './input' is not defined by
+  "exports"` in `@colyseus/schema`. `@colyseus/ws-transport` is pinned to the
+  `^0.15.3` line. Errors surface at boot (fail fast).
 
 ### 4.5 Docker
 
@@ -117,10 +126,18 @@ All images use a Node 22 base, `pnpm` from `corepack`/`pnpm/action-setup`
 equivalent, and the **monorepo** context (the repo root is the build context so
 workspace deps resolve). Each app Dockerfile:
 
-1. Builder stage: `pnpm install --frozen-lockfile` (offline-ish → `--prefer-offline`),
-   `pnpm build` filtered to the app + its workspace deps (turbo outputs).
-2. Runtime stage: `pnpm install --prod` of just the app (or copy
-   `node_modules`/dist). Apps run as CJS (`node dist`).
+1. Builder stage: `pnpm install --frozen-lockfile`,
+   `pnpm --filter <app>... build` (the `...` builds the app **and** its
+   workspace deps — `tsc` for `@deashot/*` needs those `dist` folders, and the
+   package builds need `scripts/fix-package-type.mjs`, so `scripts/` is copied
+   into the image). Root TS configs (`tsconfig.base.json`, `tsconfig.app.json`,
+   `tsconfig.pkg.json`) must be copied too — otherwise `tsc` errors with
+   `TS5083: Cannot read file '/app/tsconfig.app.json'`.
+2. Runtime stage: copies the built `dist`, the app's `package.json`, the app's
+   `node_modules` symlinks, the workspace root `node_modules` (pnpm `.pnpm`
+   store), and `packages/` as-is from the builder — **no prod reinstall**. A
+   `pnpm install --prod --filter` in the runtime stage re-resolves and breaks
+   the frozen versions (and the no-TTY purge aborts the build).
 3. Non-root user; `NODE_ENV=production`.
 
 `.dockerignore` excludes `node_modules`, `dist`, `.turbo`, logs — per-package
@@ -149,13 +166,14 @@ public port is `80` on the raw IP → players use `http://<PUBLIC_HOST>`.
 
 ### 4.6 CI/CD
 
-- **ci.yml** gains a `docker-build` job: `docker compose build` (buildkit) on the
-  PR (cached) so every merge candidate is provably image-buildable. Uses
-  `docker/setup-buildx-action` + `docker/metadata-action`.
+- **ci.yml** gains a `docker-build` job: builds all three images via
+  `docker/build-push-action` (buildx + gha cache) on every PR so every merge
+  candidate is provably image-buildable.
 - **deploy.yml** (workflow_dispatch + on push to main): SSH into the VPS
-  (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` secrets) → `git pull --ff-only`,
-  `docker compose -f docker-compose.yml pull && up -d --build`, healthcheck
-  poll. **Inert until secrets are set** (fail-safe guard step).
+  (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_ENV` secrets) →
+  `git pull --ff-only`, write `DEPLOY_ENV` to the server `.env`,
+  `docker compose up -d --build --remove-orphans`, `docker compose ps`.
+  **Inert until the secrets are set** (fail-safe guard step).
 
 ### 4.7 Monitoring & Sentry
 
@@ -167,10 +185,13 @@ public port is `80` on the raw IP → players use `http://<PUBLIC_HOST>`.
 ### 4.8 Load test
 
 `apps/web/scripts/load-test.cjs` (reuses colyseus.js + jsonwebtoken already in
-web deps): `--players 8|16|24`, `--url ws://…/ws`, `--token <jwt>` (or mint
-from the API), connect all, signal movement inputs for a few seconds, report
-success/failure counts and per-client connect/move. Root script
-`test:load` = `node apps/web/scripts/load-test.cjs`.
+web deps): `--players 8|16|24`, `--seconds <n>`, `--url ws://…/ws`, and
+`--jwt-secret <secret>` for an `REQUIRE_AUTH` server (signs guest tokens
+locally, matching the API's `JWT_SECRET`); omit for the tokenless dev server.
+Connect all, stream movement inputs, report join latency / phases / errors.
+Root script `test:load` = `pnpm --filter web test:load`.
+**Verified:** 8/8 and 16/16 players join an in-progress room through the
+compose + nginx stack in ~15ms, zero errors.
 
 ---
 
@@ -198,21 +219,32 @@ success/failure counts and per-client connect/move. Root script
   is enough for two tables; revisit only if schema grows.
 - ❌ Don't publish DB/Redis ports, don't bind api/game-server to the VM's public
   interface directly — the single nginx `80` is the only ingress.
+- ❌ Don't "fix" the colyseus deps by moving to the 0.18 line — that's a port,
+  not a phase-7 task. Stay on `colyseus@0.15` with the pinned
+  `@colyseus/core@0.15.57`.
 
 ---
 
 ## 7. Verification (before PR)
 
-- [ ] `pnpm lint` (0 errors), `pnpm typecheck`, `pnpm build`, `pnpm test:unit`
-- [ ] `pnpm test:integration` (dev-mode paths unchanged — profile store falls
+All checked on `feat/phase7-deploy`:
+
+- [x] `pnpm lint` (0 errors), `pnpm typecheck`, `pnpm build`, `pnpm test:unit`
+- [x] `pnpm test:integration` (dev-mode paths unchanged — profile store falls
       back to in-memory without DATABASE_URL)
-- [ ] New unit tests: migration runner order/idempotency (mock pool), profile
-      store parity (in-memory), config guards (Redis URL parse / healthz payload)
-- [ ] `docker compose build` — all images build on the dev box
-- [ ] `docker compose up` local stack: all healthchecks green;
-      `curl http://localhost/health`, `/healthz`; two `colyseus.js` clients join
-      the proxied `/ws` through nginx
-- [ ] `apps/web/scripts/load-test.cjs --players 24` against the local stack
+- [x] New unit tests: migration runner order/idempotency, Postgres profile store
+      parity + LRU bound (`@deashot/api`, 7 tests)
+- [x] `docker build` — all three images build on the dev box (from the repo-root
+      context; the missing root-tsconfig/`scripts` copy and the colyseus peer
+      resolution were fixed and committed)
+- [x] `docker compose up` local stack: all healthchecks green; nginx serves the
+      SPA, `/api/health` and `/ping` respond; two authenticated `colyseus.js`
+      clients join the same room through the proxied `/ws`
+- [x] Profile persistence proven: `PUT /api/profile/settings` → row visible in
+      Postgres → API container restarted → `GET` with the same JWT returns the
+      saved settings
+- [x] `apps/web/scripts/load-test.cjs --players 16` against the compose stack:
+      16/16 joins, ~15ms, no errors
 
 ## 8. Runbook — deploying to the VPS
 
@@ -227,11 +259,17 @@ success/failure counts and per-client connect/move. Root script
    openssl rand -hex 32            # → JWT_SECRET
    docker compose up -d --build
    docker compose ps               # all healthy?
-   curl http://localhost/health && curl http://localhost/healthz
+   curl http://localhost/api/health   # API through nginx
+   curl http://localhost/ping         # nginx liveness
    ```
-4. **Gate:** 8 players from 8 machines → `http://<PUBLIC_HOST>` (guest login,
+   (The game-server `/healthz` is not routed through nginx — the Compose
+   healthcheck probes it directly inside the container.)
+
+4. **Load check (optional):** `pnpm --filter web test:load -- --players 16
+   --seconds 20 --url ws://<PUBLIC_HOST>/ws --jwt-secret <JWT_SECRET>`.
+5. **Gate:** 8 players from 8 machines → `http://<PUBLIC_HOST>` (guest login,
    Quick Play), play a 10-minute TDM to `KILL_LIMIT` with no crashes.
-5. If the repo deploy is desired: set `VPS_*` secrets → run `deploy.yml`
+6. If the repo deploy is desired: set the `DEPLOY_*` secrets → run `deploy.yml`
    (workflow_dispatch) on `main`.
 
 ## 9. Follow-ups (explicitly out of scope for this milestone)

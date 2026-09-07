@@ -21,7 +21,7 @@ without crashes.
 | Web hosting | Nginx container serving the static Vite build + reverse proxy |
 | Public hostname | Raw IP for MVP; HTTPS/TLS deferred until a domain is added |
 | Database | PostgreSQL for persisted player profiles (`pg`, hand-rolled migration runner) |
-| Presence | Redis via `@colyseus/redis-presence` when `REDIS_URL` is set (single-instance falls back to in-memory) |
+| Presence | Redis via colyseus 0.15's `RedisPresence` when `REDIS_URL` is set (single-instance falls back to in-memory) |
 | Auth posture | Unchanged from Phase 5 (`REQUIRE_AUTH` on in prod, `JWT_SECRET` required) |
 | Error tracking | Sentry, opt-in via `SENTRY_DSN` (server-side only for MVP) |
 | Monitoring | Health endpoints (/health, /healthz) + Compose healthchecks + uptime |
@@ -51,6 +51,10 @@ without crashes.
 - Client no longer hardcodes `ws://localhost:2567`: `GameSocket` resolves the
   server URL from `VITE_SERVER_URL`, defaulting to `ws://localhost:2567` for dev
   and localhost integrations.
+- Dockerfiles build from the repo root (workspace-deps resolve) and must copy
+  the root TS configs (`tsconfig.base.json`, `tsconfig.app.json`,
+  `tsconfig.pkg.json`), `scripts/fix-package-type.mjs`, and build with
+  `pnpm --filter <app>... build` so `@deashot/*` packages are compiled first.
 
 ### 2. API persists profiles to Postgres
 - New `profiles` table (keyed by JWT `sub`) replaces the process-local LRU map.
@@ -65,7 +69,12 @@ without crashes.
 - New `GET /healthz` on the game server HTTP layer: `{"status":"ok","uptime":…}`
   for Compose healthchecks.
 - When `REDIS_URL` is present, Colyseus uses `RedisPresence`; otherwise the
-  default in-memory presence.
+  default in-memory presence. `RedisPresence` is re-exported by `colyseus@0.15`
+  (no separate `@colyseus/redis-presence` dependency).
+- The game-server pins `@colyseus/core@0.15.57` as a direct dependency so the
+  `@colyseus/ws-transport@0.15.x` peer resolves to the same 0.15 line —
+  otherwise pnpm picks the newest `@colyseus/core` in the store (0.18) and the
+  process dies at boot (`@colyseus/schema` subpath `./input` not exported).
 
 ### 4. One Compose stack, single public port
 - Services: `web` (nginx, `80` only), `api` (:4000), `game-server` (:2567),
@@ -76,9 +85,10 @@ without crashes.
 ### 5. CI/CD
 - Existing `ci.yml` (lint → typecheck → build → unit → integration) stays.
 - Docker images are built and their configuration validated by a `docker-build`
-  job.
-- A separate `deploy.yml` (SSH to the VPS, `docker compose pull && up -d`) runs
-  on `main`; it is inert until the `VPS_*` repository secrets are configured.
+  job (buildx + gha cache).
+- A separate `deploy.yml` (SSH to the VPS, write `DEPLOY_ENV` to the server
+  `.env`, `docker compose up -d --build`) runs on `main`; it is inert until the
+  `DEPLOY_*` repository secrets are configured.
 
 ### 6. Load / capacity
 - `load-test.cjs` spins up 8/16/24 synthetic Colyseus clients against a
@@ -104,5 +114,10 @@ added without touching the upstreams.
 - [ ] Gate: 8 real players from 8 different machines complete a full match.
 
 ## Changelog
+- v1.1 — Accepted (implementation); records the verified Docker build details
+  (repo-root context, root TS configs + `scripts/` copies, `--filter <app>...`),
+  the `@colyseus/core@0.15.57` pin and why (0.18 peer resolution), and the
+  `DEPLOY_*` secret names; `@colyseus/redis-presence` direct dep removed
+  (`RedisPresence` re-exported by colyseus 0.15).
 - v1.0 — Accepted; initial deployment architecture (raw IP, Compose, nginx,
   Postgres profiles, Redis presence, health, Sentry opt-in, CI/CD, load test).

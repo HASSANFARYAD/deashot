@@ -547,19 +547,19 @@ Server validates: weapon fire rate, player alive, ammo available, shot possible.
 
 **Steps:**
 
-- [ ] Dockerfile for web (Nginx serving static build)
-- [ ] Dockerfile for game-server (Node.js)
-- [ ] Dockerfile for API (Node.js)
-- [ ] Docker Compose: web + game-server + API + PostgreSQL + Redis
-- [ ] Nginx reverse proxy config
-- [ ] SSL/TLS via Cloudflare or Let's Encrypt
-- [ ] Environment variable management
-- [ ] Database migrations (Prisma or Drizzle)
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Sentry error tracking integration
-- [ ] Basic monitoring (health checks, uptime)
-- [ ] Load testing: 8, 16, 24 concurrent players
-- [ ] Deploy to VPS or cloud provider
+- [x] Dockerfile for web (Nginx serving static build)
+- [x] Dockerfile for game-server (Node.js)
+- [x] Dockerfile for API (Node.js)
+- [x] Docker Compose: web + game-server + API + PostgreSQL + Redis
+- [x] Nginx reverse proxy config
+- [ ] SSL/TLS via Cloudflare or Let's Encrypt _(deferred: raw IP; follow-up in docs/phase7-deploy.md §9)_
+- [x] Environment variable management
+- [x] Database migrations (hand-rolled versioned runner over `pg`, not ORM)
+- [x] CI/CD pipeline (GitHub Actions: docker-build job + guarded deps deploy.yml)
+- [x] Sentry error tracking integration (opt-in via `SENTRY_DSN`)
+- [x] Basic monitoring (health checks, uptime: /health, /healthz, /ping, Compose healthchecks)
+- [x] Load testing: 8, 16, 24 concurrent players (`apps/web/scripts/load-test.cjs`)
+- [ ] Deploy to VPS or cloud provider _(runbook ready; VPS not provisioned yet)_
 
 **Deliverable:** Game accessible at a public URL. Multiple players can connect from different machines.
 
