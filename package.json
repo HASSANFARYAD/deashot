@@ -12,7 +12,8 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:unit": "turbo test",
-    "test:integration": "node scripts/run-integration.cjs"
+    "test:integration": "node scripts/run-integration.cjs",
+    "test:load": "pnpm --filter web test:load"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

@@ -15,6 +15,7 @@
     "test:auth": "node scripts/test-auth-hardening.cjs",
     "test:api": "node scripts/test-api-hardening.cjs",
     "test:browser": "node scripts/test-browser-gate.cjs",
+    "test:load": "node scripts/load-test.cjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
