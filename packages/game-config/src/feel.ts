@@ -19,6 +19,8 @@ export const BLOOD_PARTICLE_COUNT = 5
 
 // --- Muzzle flash ---
 export const MUZZLE_FLASH_DURATION = 0.05
+export const MUZZLE_FLASH_LIGHT = 14
+export const MUZZLE_FLASH_SPRITE_SCALE = 0.35
 
 // --- Audio ---
 export const VOLUME_MASTER = 0.8

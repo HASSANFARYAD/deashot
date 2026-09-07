@@ -519,7 +519,8 @@ Server validates: weapon fire rate, player alive, ammo available, shot possible.
 - [x] Hit sound (satisfying feedback) _(Slice C)_
 - [x] Death sound _(Slice C)_
 - [x] Ambient map sounds _(Slice C)_
-- [ ] Muzzle flash improvements (dynamic light)
+- [x] Muzzle flash improvements (dynamic light) _(Slice D)_
+- [x] Remote players flash red when damaged by anyone _(Slice D, in code, playtest pending)_
 - [ ] Bullet tracer visual (optional, for feel)
 - [ ] Blood/hit particle on body hit (Slice A ✅ in code, playtest pending)
 - [ ] Wall impact dust on miss (Slice A ✅ in code, playtest pending)

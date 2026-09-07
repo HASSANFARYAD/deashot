@@ -128,11 +128,13 @@ export class RemotePlayers {
     return entry.mesh.position.clone();
   }
 
-  /** Briefly tint a remote player's body red to signal a hit. */
-  hitFlash(sessionId: string) {
+  /** Briefly tint a remote player's body red to signal damage. `amount` scales
+   * the flash strength/duration (e.g. damage amount relative to full rifle shot). */
+  hitFlash(sessionId: string, amount = 1) {
     const entry = this.players.get(sessionId);
     if (!entry) return;
-    entry.hitFlashUntil = performance.now() / 1000 + HIT_FLASH_DURATION;
+    entry.hitFlashUntil =
+      performance.now() / 1000 + HIT_FLASH_DURATION * Math.max(0.1, amount);
   }
 
   /**
@@ -145,7 +147,7 @@ export class RemotePlayers {
     for (const { mesh, bodyMat, samples, hitFlashUntil } of this.players.values()) {
       // Decay hit-flash emissive tint.
       const flashLeft = hitFlashUntil - nowMs / 1000;
-      const emissive = flashLeft > 0 ? Math.max(0, flashLeft / HIT_FLASH_DURATION) : 0;
+      const emissive = flashLeft > 0 ? Math.max(0, Math.min(1, flashLeft / HIT_FLASH_DURATION)) : 0;
       bodyMat.emissive.setRGB(emissive, 0, 0);
 
       if (samples.length < 2) {

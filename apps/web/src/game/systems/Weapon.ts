@@ -7,6 +7,9 @@ import {
   BOB_AMP,
   RECOIL_PITCH,
   RECOIL_YAW,
+  MUZZLE_FLASH_DURATION,
+  MUZZLE_FLASH_LIGHT,
+  MUZZLE_FLASH_SPRITE_SCALE,
 } from "@deashot/game-config";
 import type { FPSCamera } from "./FPSCamera";
 import type { InputState } from "./InputManager";
@@ -35,6 +38,8 @@ export class Weapon {
   private muzzleFlash = 0;
   private model: THREE.Group;
   private muzzlePoint: THREE.PointLight;
+  private muzzleFlashSprite: THREE.Sprite;
+  private muzzleLocal = new THREE.Vector3(0.06, -0.05, -0.5);
   private recoilOffset = 0;
   private aimAmount = 0;
   private moveHSpeed = 0;
@@ -49,11 +54,42 @@ export class Weapon {
     this.group = new THREE.Group();
     this.model = this.buildModel();
     this.muzzlePoint = new THREE.PointLight(0xffaa00, 0, 4);
-    this.muzzlePoint.position.set(0.06, -0.04, -0.5);
+    this.muzzlePoint.position.copy(this.muzzleLocal);
+    this.muzzleFlashSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: this.makeFlashTexture(),
+        color: 0xffcc88,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        transparent: true,
+        opacity: 0,
+      })
+    );
+    // Scale 0 keeps cacheSize > 0 so the sprite exists; hidden until fire.
+    this.muzzleFlashSprite.scale.setScalar(0.001);
+    this.muzzleFlashSprite.position.copy(this.muzzleLocal);
     this.group.add(this.model);
     this.group.add(this.muzzlePoint);
+    this.group.add(this.muzzleFlashSprite);
     // Position weapon in lower-right of camera view.
     this.group.position.set(0.25, -0.22, -0.45);
+  }
+
+  /** Procedural radial-glow texture for the flash sprite (no asset needed). */
+  private makeFlashTexture(): THREE.CanvasTexture {
+    const size = 64;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return new THREE.CanvasTexture(canvas);
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, "rgba(255,255,255,1)");
+    g.addColorStop(0.35, "rgba(255,200,120,0.7)");
+    g.addColorStop(1, "rgba(255,160,60,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    return new THREE.CanvasTexture(canvas);
   }
 
   private buildModel(): THREE.Group {
@@ -187,8 +223,10 @@ export class Weapon {
       this.lastFireTime = now;
       this.currentAmmo--;
 
-      // Muzzle flash.
-      this.muzzleFlash = 0.06;
+      // Muzzle flash (sprite + light spike).
+      this.muzzleFlash = MUZZLE_FLASH_DURATION;
+      this.muzzleFlashSprite.scale.setScalar(MUZZLE_FLASH_SPRITE_SCALE);
+      (this.muzzleFlashSprite.material as THREE.SpriteMaterial).opacity = 1;
 
       // Recoil visual.
       this.recoilOffset = 0.03;
@@ -200,7 +238,7 @@ export class Weapon {
       _camera.camera.getWorldDirection(ray.direction);
 
       // Muzzle world position (weapon is attached to the camera).
-      const muzzleWorld = new THREE.Vector3(0.06, -0.05, -0.5);
+      const muzzleWorld = this.muzzleLocal.clone();
       muzzleWorld.applyQuaternion(_camera.camera.quaternion);
       muzzleWorld.add(_camera.camera.position);
 
@@ -220,10 +258,14 @@ export class Weapon {
       }
     }
 
-    // Decay muzzle flash.
+    // Decay muzzle flash: light + sprite fade together (spike 0 → HIGH → 0).
     if (this.muzzleFlash > 0) {
       this.muzzleFlash -= dt;
-      this.muzzlePoint.intensity = this.muzzleFlash > 0 ? 8 : 0;
+      const ratio = Math.max(0, this.muzzleFlash / MUZZLE_FLASH_DURATION);
+      this.muzzlePoint.intensity = ratio * ratio * MUZZLE_FLASH_LIGHT;
+      const spriteMat = this.muzzleFlashSprite.material as THREE.SpriteMaterial;
+      spriteMat.opacity = ratio;
+      this.muzzleFlashSprite.scale.setScalar(MUZZLE_FLASH_SPRITE_SCALE * ratio);
     }
 
     // Decay recoil.

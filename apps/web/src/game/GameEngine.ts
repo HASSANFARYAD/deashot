@@ -273,8 +273,12 @@ export class GameEngine {
       this.callbacks.onKill?.(event);
     };
     callbacks.onDamage = (event) => {
-      // Only the actual victim sees the damage-direction UI.
-      if (event.targetId !== socket.sessionId) return;
+      // A remote victim flashing red from anyone's shots (server broadcasts
+      // per-victim damage to all clients).
+      if (event.targetId !== socket.sessionId) {
+        this.remote.hitFlash(event.targetId, event.amount / 25);
+        return;
+      }
 
       this.camera.addShake(SHAKE_DAMAGE);
       this.audio.play("damage", { pan: this.panFor(event.attackerId) });
