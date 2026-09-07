@@ -9,6 +9,7 @@ import {
   PLAYER_HEIGHT,
   PLAYER_RADIUS,
   PLAYER_MAX_HEALTH,
+  FOOTSTEP_INTERVAL,
 } from "@deashot/game-config";
 import type { InputState } from "./InputManager";
 import type { FPSCamera } from "./FPSCamera";
@@ -20,11 +21,18 @@ export class PlayerController {
   health = PLAYER_MAX_HEALTH;
 
   private grounded = false;
+  private footstepTimer = 0;
+  private onFootstep: (() => void) | null = null;
 
   constructor(
     private camera: FPSCamera,
     private collision: CollisionWorld
   ) {}
+
+  /** Register a callback fired at FOOTSTEP_INTERVAL while walking on ground. */
+  setFootstepCallback(cb: () => void) {
+    this.onFootstep = cb;
+  }
 
   /** Read input and integrate physics for one tick. */
   update(input: InputState, dt: number) {
@@ -108,6 +116,15 @@ export class PlayerController {
     // Kill downward velocity when grounded.
     if (this.grounded && this.velocity.y < 0) {
       this.velocity.y = 0;
+    }
+
+    // Footstep trigger (grounded + moving, throttled).
+    this.footstepTimer -= dt;
+    const moving = this.grounded &&
+      (input.forward || input.backward || input.left || input.right);
+    if (moving && this.footstepTimer <= 0) {
+      this.footstepTimer = FOOTSTEP_INTERVAL;
+      this.onFootstep?.();
     }
 
     // Update camera.

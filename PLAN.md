@@ -514,11 +514,11 @@ Server validates: weapon fire rate, player alive, ammo available, shot possible.
 - [x] Weapon recoil pattern (visual + mechanical)
 - [x] Weapon bob while walking
 - [x] Camera shake on damage
-- [ ] Footstep sounds (positional audio)
-- [ ] Gunshot sounds
-- [ ] Hit sound (satisfying feedback)
-- [ ] Death sound
-- [ ] Ambient map sounds
+- [x] Footstep sounds (positional audio) _(Slice C)_
+- [x] Gunshot sounds _(Slice C)_
+- [x] Hit sound (satisfying feedback) _(Slice C)_
+- [x] Death sound _(Slice C)_
+- [x] Ambient map sounds _(Slice C)_
 - [ ] Muzzle flash improvements (dynamic light)
 - [ ] Bullet tracer visual (optional, for feel)
 - [ ] Blood/hit particle on body hit (Slice A ✅ in code, playtest pending)

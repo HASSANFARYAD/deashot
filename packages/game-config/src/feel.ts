@@ -19,3 +19,15 @@ export const BLOOD_PARTICLE_COUNT = 5
 
 // --- Muzzle flash ---
 export const MUZZLE_FLASH_DURATION = 0.05
+
+// --- Audio ---
+export const VOLUME_MASTER = 0.8
+export const VOLUME_SFX = 0.7
+export const VOLUME_AMBIENT = 0.25
+export const GUNSHOT_VOLUME = 0.5
+export const IMPACT_VOLUME = 0.35
+export const HIT_VOLUME = 0.4
+export const DAMAGE_VOLUME = 0.5
+export const DEATH_VOLUME = 0.5
+export const FOOTSTEP_VOLUME = 0.25
+export const RELOAD_VOLUME = 0.35

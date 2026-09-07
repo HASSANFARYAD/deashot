@@ -10,6 +10,16 @@ import {
   HIT_FLASH_DURATION,
   BLOOD_PARTICLE_COUNT,
   MUZZLE_FLASH_DURATION,
+  VOLUME_MASTER,
+  VOLUME_SFX,
+  VOLUME_AMBIENT,
+  GUNSHOT_VOLUME,
+  IMPACT_VOLUME,
+  HIT_VOLUME,
+  DAMAGE_VOLUME,
+  DEATH_VOLUME,
+  FOOTSTEP_VOLUME,
+  RELOAD_VOLUME,
 } from "./feel";
 
 describe("feel constants", () => {
@@ -55,5 +65,26 @@ describe("feel constants", () => {
     expect(Number.isFinite(MUZZLE_FLASH_DURATION)).toBe(true);
     expect(MUZZLE_FLASH_DURATION).toBeGreaterThan(0.01);
     expect(MUZZLE_FLASH_DURATION).toBeLessThan(0.2);
+  });
+
+  describe("audio volumes", () => {
+    const volumes = [
+      VOLUME_MASTER,
+      VOLUME_SFX,
+      VOLUME_AMBIENT,
+      GUNSHOT_VOLUME,
+      IMPACT_VOLUME,
+      HIT_VOLUME,
+      DAMAGE_VOLUME,
+      DEATH_VOLUME,
+      FOOTSTEP_VOLUME,
+      RELOAD_VOLUME,
+    ];
+
+    it.each(volumes)("volume %s is finite and within 0..1", (v) => {
+      expect(Number.isFinite(v)).toBe(true);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    });
   });
 });

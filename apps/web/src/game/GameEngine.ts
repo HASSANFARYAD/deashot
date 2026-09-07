@@ -15,6 +15,7 @@ import type {
 } from "./networking/GameSocket";
 import { SERVER_SNAPSHOT_RATE } from "@deashot/shared";
 import { SHAKE_DAMAGE } from "@deashot/game-config";
+import { AudioManager } from "./systems/AudioManager";
 
 export interface ScoreboardEntry {
   id: string;
@@ -73,6 +74,7 @@ export class GameEngine {
   private effects: Effects;
   private collision: CollisionWorld;
   private remote: RemotePlayers;
+  private audio: AudioManager;
   private socket: GameSocket | null;
   private callbacks: GameCallbacks;
   private running = false;
@@ -139,10 +141,12 @@ export class GameEngine {
     this.camera = new FPSCamera();
     this.collision = new CollisionWorld();
     this.player = new PlayerController(this.camera, this.collision);
+    this.player.setFootstepCallback(() => this.audio.play("footstep"));
     this.weapon = new Weapon();
     this.effects = new Effects(this.scene);
     this.remote = new RemotePlayers(this.scene);
     this.remote.setInterpolationDelay(1000 / SERVER_SNAPSHOT_RATE);
+    this.audio = AudioManager.getInstance();
 
     // Attach weapon to camera.
     this.camera.camera.add(this.weapon.group);
@@ -171,6 +175,8 @@ export class GameEngine {
 
     // Pointer lock on click (document-level so overlays/HUD don't block it).
     const onClick = () => {
+      // Must be a user gesture for the Web Audio context.
+      this.audio.ensureContext();
       if (!document.pointerLockElement) {
         this.input.requestPointerLock(container);
       }
@@ -257,9 +263,13 @@ export class GameEngine {
           this.effects.bloodImpact(pos, MISS_NORMAL);
         }
       }
+      this.audio.play(event.headshot ? "headshot" : "hit", {
+        pan: this.panFor(event.victimId),
+      });
       this.callbacks.onHit?.(event);
     };
     callbacks.onKill = (event) => {
+      this.audio.play("death", { pan: this.panFor(event.victimId) });
       this.callbacks.onKill?.(event);
     };
     callbacks.onDamage = (event) => {
@@ -267,6 +277,7 @@ export class GameEngine {
       if (event.targetId !== socket.sessionId) return;
 
       this.camera.addShake(SHAKE_DAMAGE);
+      this.audio.play("damage", { pan: this.panFor(event.attackerId) });
 
       // Bearing toward the attacker, relative to the local camera facing.
       let bearing = 0;
@@ -279,6 +290,18 @@ export class GameEngine {
 
       this.callbacks.onDamage?.({ ...event, bearing });
     };
+  }
+
+  /** Stereo pan (-1..1) toward a remote player, relative to camera facing. */
+  private panFor(id: string): number {
+    const pos = this.remote.getPosition(id);
+    if (!pos) return 0;
+    const dx = pos.x - this.player.position.x;
+    const dz = pos.z - this.player.position.z;
+    const [fx, fz] = this.camera.getForwardXZ();
+    const len = Math.hypot(dx, dz);
+    if (len < 0.001) return 0;
+    return Math.max(-1, Math.min(1, (dx * fz - dz * fx) / len));
   }
 
   private emitState() {
@@ -362,19 +385,22 @@ export class GameEngine {
       this.camera,
       (point, normal) => {
         this.effects.bulletImpact(point, normal);
+        this.audio.play("impact");
       },
       (point) => {
         // Miss: the ray passed nothing near — drop subtle dust at the far point.
         this.effects.bulletImpact(point, MISS_NORMAL);
       },
       { hSpeed, grounded: this.player.isGrounded() },
-      (pitch, yaw) => this.camera.addKick(pitch, yaw)
+      (pitch, yaw) => this.camera.addKick(pitch, yaw),
+      () => this.audio.play("reload")
     );
 
     // Visible tracer + muzzle flash for every shot + send to server.
     if (shot) {
       this.effects.tracer(shot.origin, shot.point);
       this.effects.muzzleFlash(shot.origin);
+      this.audio.play("gunshot");
 
       if (this.socket) {
         const dir = shot.point.clone().sub(shot.origin).normalize();
@@ -418,10 +444,13 @@ export class GameEngine {
     return this.socket?.connected ?? false;
   }
 
-  /** Apply user settings that affect the engine (mouse sensitivity). */
-  applySettings(settings: { sensitivity?: number }) {
+  /** Apply user settings that affect the engine (mouse sensitivity, volume). */
+  applySettings(settings: { sensitivity?: number; volume?: number }) {
     if (typeof settings.sensitivity === "number") {
       this.camera.setSensitivity(settings.sensitivity);
+    }
+    if (typeof settings.volume === "number") {
+      this.audio.setMasterVolume(settings.volume);
     }
   }
 

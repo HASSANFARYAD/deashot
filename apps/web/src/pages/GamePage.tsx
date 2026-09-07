@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import type { GameState } from "../game/GameEngine";
 import type { ServerHitEvent, ServerKillEvent, ServerDamageEvent } from "../game/Game";
+import type { GameEngine } from "../game/Game";
 import { createGame } from "../game/Game";
 import type { ProfileSettings } from "../settings/api";
 import { HUD } from "../components/HUD/HUD";
@@ -27,7 +28,8 @@ export function GamePage({
   onSaveSettings,
 }: GamePageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const engineRef = useRef<{ dispose: () => void } | null>(null);
+  const engineRef = useRef<{ dispose: () => void; getEngine: () => GameEngine } | null>(null);
+  const volumeRef = useRef(settings.volume);
   const [playSession, setPlaySession] = useState(0);
   const [gameState, setGameState] = useState<GameState>({
     health: 100,
@@ -96,7 +98,7 @@ export function GamePage({
 
     // Apply the player's saved settings to the engine (sensitivity).
     const engine = game.getEngine();
-    engine.applySettings({ sensitivity: settings.sensitivity });
+    engine.applySettings({ sensitivity: settings.sensitivity, volume: volumeRef.current });
     engineRef.current = game;
 
     // Expose for automated browser tests (Playwright) to introspect the scene.
@@ -126,6 +128,12 @@ export function GamePage({
       engineRef.current = null;
     };
   }, [online, token, settings.sensitivity, handleHit, handleKill, handleDamage, playSession]);
+
+  // Volume changes apply live without recreating the game.
+  useEffect(() => {
+    volumeRef.current = settings.volume;
+    engineRef.current?.getEngine().applySettings({ volume: settings.volume });
+  }, [settings.volume]);
 
   const handlePlayAgain = useCallback(() => {
     setKillFeed([]);

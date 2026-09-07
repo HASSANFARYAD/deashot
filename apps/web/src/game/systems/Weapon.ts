@@ -130,7 +130,8 @@ export class Weapon {
     onHit: (point: THREE.Vector3, normal: THREE.Vector3) => void,
     _onMiss: (point: THREE.Vector3) => void,
     move: { hSpeed: number; grounded: boolean },
-    onKick?: (pitch: number, yaw: number) => void
+    onKick?: (pitch: number, yaw: number) => void,
+    onReload?: (phase: "start" | "complete") => void
   ): ShootEvent | null {
     const now = performance.now() / 1000;
     let shootEvent: ShootEvent | null = null;
@@ -159,6 +160,7 @@ export class Weapon {
       if (this.reloadTimer <= 0) {
         this.reloading = false;
         this.currentAmmo = this.stats.magazineSize;
+        onReload?.("complete");
       }
     }
 
@@ -166,12 +168,14 @@ export class Weapon {
     if (input.reload && !this.reloading && this.currentAmmo < this.stats.magazineSize) {
       this.reloading = true;
       this.reloadTimer = this.stats.reloadTime;
+      onReload?.("start");
     }
 
     // Auto-reload when empty.
     if (this.currentAmmo <= 0 && !this.reloading) {
       this.reloading = true;
       this.reloadTimer = this.stats.reloadTime;
+      onReload?.("start");
     }
 
     // Fire rate check.
