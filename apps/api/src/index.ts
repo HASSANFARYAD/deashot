@@ -2,11 +2,17 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
+import * as Sentry from "@sentry/node";
+import { join } from "node:path";
+import { createProfileStore, type ProfileSettings } from "./db";
+import { runMigrations } from "./migrate";
 
 const port = Number(process.env.PORT || 4000);
 
 const DEV_JWT_SECRET = "deashot-dev-secret-change-me";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const DATABASE_URL = process.env.DATABASE_URL;
+const SENTRY_DSN = process.env.SENTRY_DSN;
 
 /**
  * Must match the game server's secret — it verifies the tokens signed here.
@@ -28,12 +34,6 @@ const JWT_SECRET: string = (() => {
 /** Guest tokens are disposable identities, not long-lived credentials. */
 const GUEST_TOKEN_TTL = "12h";
 
-interface ProfileSettings {
-  sensitivity: number;
-  volume: number;
-  crosshairColor: string;
-}
-
 const DEFAULT_SETTINGS: ProfileSettings = {
   sensitivity: 1.0,
   volume: 1.0,
@@ -41,36 +41,14 @@ const DEFAULT_SETTINGS: ProfileSettings = {
 };
 
 /**
- * Lightweight per-profile store (keyed by JWT `sub`). No DB dependency in MVP.
- *
- * Every guest login mints a fresh `sub`, so this grows with traffic and never
- * shrinks. Bounded with least-recently-used eviction: unbounded, a scripted
- * login loop grows it until the process runs out of memory. A real store
- * replaces this when profiles are persisted.
+ * Profile store resolved once at boot. When `DATABASE_URL` is present the
+ * store is Postgres-backed (via `db.ts`); otherwise a bounded in-memory LRU
+ * keeps dev/test/integration wiring simple.
  */
-const MAX_TRACKED_PROFILES = 10_000;
-const profileSettings = new Map<string, ProfileSettings>();
+const profileStore = createProfileStore(DATABASE_URL);
 
-function readProfile(sub: string): ProfileSettings | undefined {
-  const found = profileSettings.get(sub);
-  if (found) {
-    // Refresh recency: Map preserves insertion order, so re-inserting moves
-    // this entry to the newest position.
-    profileSettings.delete(sub);
-    profileSettings.set(sub, found);
-  }
-  return found;
-}
-
-function writeProfile(sub: string, settings: ProfileSettings): void {
-  profileSettings.delete(sub);
-  profileSettings.set(sub, settings);
-  while (profileSettings.size > MAX_TRACKED_PROFILES) {
-    const oldest = profileSettings.keys().next();
-    if (oldest.done) break;
-    profileSettings.delete(oldest.value);
-  }
-}
+/** Relative to dist/ at runtime (tsc resolves __dirname as cwd). */
+const MIGRATIONS_DIR = join(__dirname, "..", "migrations");
 
 /**
  * Usernames are shown to every other player in the kill feed and scoreboard,
@@ -102,6 +80,16 @@ const profileSettingsSchema = {
 } as const;
 
 async function main() {
+  // Opt-in error reporting: only active when SENTRY_DSN is configured.
+  if (SENTRY_DSN) {
+    Sentry.init({
+      dsn: SENTRY_DSN,
+      environment: IS_PRODUCTION ? "production" : "development",
+      tracesSampleRate: 0,
+    });
+    Sentry.setTag("service", "api");
+  }
+
   const app = Fastify({ logger: true });
 
   // Browsers are the only intended caller. ALLOWED_ORIGINS restricts this to
@@ -157,14 +145,14 @@ async function main() {
   app.get("/profile/settings", async (request) => {
     await request.jwtVerify();
     const sub = (request.user as { sub: string }).sub;
-    return readProfile(sub) || DEFAULT_SETTINGS;
+    return (await profileStore.get(sub)) ?? DEFAULT_SETTINGS;
   });
 
   app.put("/profile/settings", { schema: profileSettingsSchema }, async (request) => {
     await request.jwtVerify();
     const sub = (request.user as { sub: string }).sub;
     const body = (request.body ?? {}) as Partial<ProfileSettings>;
-    const current = readProfile(sub) || { ...DEFAULT_SETTINGS };
+    const current = (await profileStore.get(sub)) ?? { ...DEFAULT_SETTINGS };
     // Ranges are enforced by the schema above; anything absent keeps its
     // current value so this stays a partial update.
     const next: ProfileSettings = {
@@ -172,15 +160,39 @@ async function main() {
       volume: body.volume ?? current.volume,
       crosshairColor: body.crosshairColor ?? current.crosshairColor,
     };
-    writeProfile(sub, next);
+    await profileStore.put(sub, next);
     return next;
   });
+
+  // Run pending database migrations once at boot before accepting traffic.
+  if (DATABASE_URL) {
+    try {
+      const applied = await runMigrations(DATABASE_URL, MIGRATIONS_DIR);
+      app.log.info(
+        `[db] migrations applied: ${applied.length ? applied.join(", ") : "none"}`
+      );
+    } catch (err) {
+      app.log.error(err, "[db] migration failed — aborting");
+      await profileStore.close();
+      throw err;
+    }
+  }
+
+  // Graceful shutdown: close the store (Postgres pool, if present).
+  const shutdown = async () => {
+    await profileStore.close();
+    await app.close();
+    process.exit(0);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 
   await app.listen({ port, host: "0.0.0.0" });
   app.log.info(`API listening on :${port}`);
 }
 
 main().catch((err) => {
+  if (SENTRY_DSN) Sentry.captureException(err);
   console.error(err);
   process.exit(1);
 });

@@ -1,58 +1,101 @@
+# Deashot production stack — single VM, single public port (80).
+#
+# 1. cp .env.example.deploy .env   and fill in JWT_SECRET, PUBLIC_HOST, DB password
+# 2. docker compose up -d --build
+#
+# Only the `web` (nginx) port is published. API, game-server, Postgres and Redis
+# are reachable only inside the Compose network.
+
 services:
-  api:
-    build: ./docker/api
-    ports:
-      - "4000:4000"
-    environment:
-      # Never hardcode this. The previous literal was the development fallback
-      # published in this repository, so any deploy using it accepted forged
-      # tokens. `:?` fails the run when it is unset rather than defaulting.
-      - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in .env before running}
-      - NODE_ENV=${NODE_ENV:-production}
-      - DATABASE_URL=postgres://deashot:deashot@postgres:5432/deashot
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - postgres
-      - redis
-
-  game-server:
-    build: ./docker/game-server
-    ports:
-      - "2567:2567"
-    environment:
-      - PORT=2567
-      # The game server verifies the tokens the API signs, so it needs the same
-      # secret. It previously got none and silently fell back to the dev
-      # default, which meant setting a real secret on the API alone broke every
-      # join.
-      - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in .env before running}
-      - NODE_ENV=${NODE_ENV:-production}
-    depends_on:
-      - redis
-
   web:
-    build: ./docker/web
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: /api
+        VITE_SERVER_URL: ${VITE_SERVER_URL:-ws://localhost/ws}
     ports:
       - "80:80"
     depends_on:
-      - api
-      - game-server
+      api:
+        condition: service_healthy
+      game-server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      DATABASE_URL: postgres://${POSTGRES_USER:-deashot}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/${POSTGRES_DB:-deashot}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  game-server:
+    build:
+      context: .
+      dockerfile: apps/game-server/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: "2567"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in .env}
+      REQUIRE_AUTH: "${REQUIRE_AUTH:-1}"
+      REDIS_URL: ${REDIS_URL:-}
+      ALLOW_TEST_ROOM_OPTIONS: "0"
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    depends_on:
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:2567/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
-      - POSTGRES_USER=deashot
-      - POSTGRES_PASSWORD=deashot
-      - POSTGRES_DB=deashot
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-deashot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required — set it in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-deashot}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deashot} -d ${POSTGRES_DB:-deashot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
 volumes:
   pgdata:
+  redisdata:

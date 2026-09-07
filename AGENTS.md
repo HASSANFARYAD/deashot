@@ -66,6 +66,7 @@ All tests live alongside source in `*.test.ts` files and run via `vitest`.
 | `@deashot/math` | `src/math.test.ts` | clamp, lerp, length3, normalizeAngle (incl. non-finite and large-magnitude input), lookVectorFromYawPitch |
 | `@deashot/shared` | `src/protocol.test.ts` | PlayerInput JSON round-trip, default shape, match constant sanity |
 | `@deashot/game-config` | `src/config.test.ts` | ASSAULT_RIFLE stats validity, weapon lookup, player physics sanity |
+| `@deashot/api` | `src/db.test.ts`, `src/migrate.test.ts` | Memory + Postgres profile store get/put, LRU bound, Postgres fallback, migration runner applies versioned SQL once and tracks versions (Phase 7) |
 
 ### Integration tests (`pnpm test:integration`)
 

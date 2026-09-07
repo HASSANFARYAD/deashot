@@ -9,10 +9,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@colyseus/core": "0.15.57",
     "@colyseus/schema": "^2.0.37",
+    "@colyseus/ws-transport": "^0.15.3",
     "@deashot/game-config": "workspace:*",
     "@deashot/math": "workspace:*",
     "@deashot/shared": "workspace:*",
+    "@sentry/node": "^10.73.0",
     "colyseus": "^0.15.0",
     "jsonwebtoken": "^9.0.3"
   },
