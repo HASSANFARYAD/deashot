@@ -26,6 +26,7 @@ const COMBAT_TEST   = path.join(ROOT, "apps", "web", "scripts", "test-combat.cjs
 const MATCH_END_TEST = path.join(ROOT, "apps", "web", "scripts", "test-match-end.cjs");
 const WARMUP_TEST = path.join(ROOT, "apps", "web", "scripts", "test-warmup.cjs");
 const SHOT_VALIDATION_TEST = path.join(ROOT, "apps", "web", "scripts", "test-shot-validation.cjs");
+const WALL_OCCLUSION_TEST = path.join(ROOT, "apps", "web", "scripts", "test-wall-occlusion.cjs");
 const AUTH_HARDENING_TEST = path.join(ROOT, "apps", "web", "scripts", "test-auth-hardening.cjs");
 const API_HARDENING_TEST = path.join(ROOT, "apps", "web", "scripts", "test-api-hardening.cjs");
 const BROWSER_TEST  = path.join(ROOT, "apps", "web", "scripts", "test-browser-gate.cjs");
@@ -145,6 +146,11 @@ async function main() {
     console.log("[integration] Anti-cheat — shot validation (spoofed aim/origin)");
     execSync(`node "${SHOT_VALIDATION_TEST}"`, { cwd: ROOT, stdio: "inherit" });
     console.log("[integration] Anti-cheat PASSED\n");
+
+    // ===== Wall occlusion: world geometry blocks server hitscan (audit P0-2) =====
+    console.log("[integration] Collision — wall/cover blocks server hitscan");
+    execSync(`node "${WALL_OCCLUSION_TEST}"`, { cwd: ROOT, stdio: "inherit" });
+    console.log("[integration] Collision PASSED\n");
 
     // ===== Hardening: auth, room options, API input (P0-4, P0-5, P1-21/22) =====
     // Both start their own server on another port, because this one
