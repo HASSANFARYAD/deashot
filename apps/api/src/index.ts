@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
+import * as Sentry from "@sentry/node";
 import { join } from "node:path";
 import { createProfileStore, type ProfileSettings } from "./db";
 import { runMigrations } from "./migrate";
@@ -11,6 +12,7 @@ const port = Number(process.env.PORT || 4000);
 const DEV_JWT_SECRET = "deashot-dev-secret-change-me";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const DATABASE_URL = process.env.DATABASE_URL;
+const SENTRY_DSN = process.env.SENTRY_DSN;
 
 /**
  * Must match the game server's secret — it verifies the tokens signed here.
@@ -78,6 +80,16 @@ const profileSettingsSchema = {
 } as const;
 
 async function main() {
+  // Opt-in error reporting: only active when SENTRY_DSN is configured.
+  if (SENTRY_DSN) {
+    Sentry.init({
+      dsn: SENTRY_DSN,
+      environment: IS_PRODUCTION ? "production" : "development",
+      tracesSampleRate: 0,
+    });
+    Sentry.setTag("service", "api");
+  }
+
   const app = Fastify({ logger: true });
 
   // Browsers are the only intended caller. ALLOWED_ORIGINS restricts this to
@@ -180,6 +192,7 @@ async function main() {
 }
 
 main().catch((err) => {
+  if (SENTRY_DSN) Sentry.captureException(err);
   console.error(err);
   process.exit(1);
 });
