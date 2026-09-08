@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - redis.yaml
+  - api.yaml
+  - game-server.yaml
+  - web.yaml
+  - ingress.yaml
+  # NOTE: `deashot-secrets` (Secret) and `deashot-config` (ConfigMap) are NOT
+  # defined here. They are created on the cluster by scripts/setup-secrets.sh
+  # from a gitignored .env so real values never enter the repo.
+  # If you apply without running setup-secrets.sh first, the Deployments will
+  # fail to find these resources — run it once after the cluster is up.
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
