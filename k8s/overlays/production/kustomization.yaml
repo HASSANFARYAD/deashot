@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: deashot
+
+patches:
+  - target:
+      kind: Ingress
+      name: deashot-ingress
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: play.deashot.local
+  - target:
+      kind: Deployment
+      name: web
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  - target:
+      kind: Deployment
+      name: api
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  - target:
+      kind: Deployment
+      name: game-server
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2

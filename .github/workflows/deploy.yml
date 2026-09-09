@@ -1,30 +1,25 @@
-name: Deploy
+name: Deploy to VM
 
-# Deploys the game to the production VPS via Docker Compose over SSH.
-#
-# Wiring (once, by the owner):
-#   GH repo → Settings → Secrets and variables → Actions:
-#     DEPLOY_HOST          e.g. 203.0.113.10 (raw IP, no TLS yet)
-#     DEPLOY_USER          SSH user with access to the repo checkout
-#     DEPLOY_SSH_KEY       private key (ed25519) for the SSH user
-#     DEPLOY_ENV           full contents of the server `.env`
-#                          (JWT_SECRET, POSTGRES_PASSWORD, VITE_SERVER_URL,
-#                           ALLOWED_ORIGINS, REDIS_URL, SENTRY_DSN ...)
-#
-# The workflow is inert (echoes "not configured") until all four secrets are
-# present, so it is safe to merge before the VPS exists.
-
+# Deploys on every push to main (requires the GitHub Secrets below) and can
+# also be triggered manually from the Actions tab (workflow_dispatch).
 on:
-  workflow_dispatch:
   push:
     branches: [main]
+  workflow_dispatch:
 
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: true
+env:
+  REGISTRY: ${{ secrets.REGISTRY }}          # e.g. docker.io or ghcr.io or 203.0.113.10:5000
+  DOCKER_REPO: ${{ secrets.DOCKER_REPO }}    # e.g. myuser/deashot
+  REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+  REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+  IMAGE_TAG: ${{ github.sha }}
+  VM_HOST: ${{ secrets.VM_HOST }}            # public IP / host of the VM
+  VM_USER: ${{ secrets.VM_USER }}            # SSH user on the VM
+  APP_NAMESPACE: ${{ secrets.APP_NAMESPACE || 'deashot' }}
+  KUBE_OVERLAY: ${{ secrets.KUBE_OVERLAY || 'k8s/overlays/staging' }}
 
 jobs:
-  deploy:
+  build-push-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Guard on secrets
@@ -32,11 +27,12 @@ jobs:
         shell: bash
         run: |
           MISSING=""
-          for s in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_ENV; do
-            if [ -z "${{ secrets[s] }}" ]; then MISSING="$MISSING $s"; fi
+          for s in REGISTRY DOCKER_REPO REGISTRY_USERNAME REGISTRY_PASSWORD VM_HOST VM_USER VM_SSH_KEY; do
+            eval "v=\${$s:-}"
+            if [ -z "$v" ]; then MISSING="$MISSING $s"; fi
           done
           if [ -n "$MISSING" ]; then
-            echo "::notice ::Deploy skipped — secrets not configured:$MISSING"
+            echo "::notice ::Deploy skipped - secrets not configured:$MISSING"
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
@@ -45,22 +41,101 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.guard.outputs.configured == 'true'
 
-      - name: Deploy via Compose
+      - uses: docker/setup-buildx-action@v3
+        if: steps.guard.outputs.configured == 'true'
+
+      - name: Login to container registry
+        if: steps.guard.outputs.configured == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push API image
+        if: steps.guard.outputs.configured == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.DOCKER_REPO }}-api:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push game-server image
+        if: steps.guard.outputs.configured == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/game-server/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.DOCKER_REPO }}-game-server:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push web image (with VITE_SERVER_URL)
+        if: steps.guard.outputs.configured == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          build-args: |
+            VITE_API_URL=/api
+            VITE_SERVER_URL=${{ secrets.VITE_SERVER_URL || 'ws://localhost/ws' }}
+          tags: ${{ env.REGISTRY }}/${{ env.DOCKER_REPO }}-web:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Create the k8s Secret + ConfigMap on the VM from .env (never from git),
+      # then rewrite image tags and apply the manifests via SSH.
+      - name: Deploy to VM via SSH
         if: steps.guard.outputs.configured == 'true'
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          DEPLOY_ENV_CONTENT: ${{ secrets.DEPLOY_ENV }}
+        envs: KUBE_OVERLAY,APP_NAMESPACE,REGISTRY,DOCKER_REPO,IMAGE_TAG
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          command_timeout: 30m
+          host: ${{ env.VM_HOST }}
+          username: ${{ env.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
           script: |
             set -e
-            cd deashot
-            git fetch origin main
-            git checkout main
-            git pull --ff-only origin main
-            echo "$DEPLOY_ENV_CONTENT" > .env
-            docker compose up -d --build --remove-orphans
-            docker compose ps
+            cd /opt/deashot
+
+            # Pull latest manifests/scripts from git
+            git pull --ff-only
+
+            # Ensure the .env exists on the VM (edit it once there with real secrets)
+            if [ ! -f .env ]; then
+              echo "ERROR: /opt/deashot/.env not found. Create it with real values first." >&2
+              exit 1
+            fi
+
+            # Inject secrets + config into the cluster
+            ./scripts/setup-secrets.sh
+
+            # Point the manifests at the freshly-built images. Work on a temp
+            # copy so the tracked repo files are never modified, then honor the
+            # overlay chosen via KUBE_OVERLAY (e.g. k8s/overlays/production).
+            OVERLAY_NAME="${KUBE_OVERLAY#k8s/overlays/}"
+            rm -rf /tmp/k8s-deploy
+            cp -r k8s /tmp/k8s-deploy
+            cd "/tmp/k8s-deploy/overlays/$OVERLAY_NAME"
+            kustomize edit set image \
+              deashot-api=${{ env.REGISTRY }}/${{ env.DOCKER_REPO }}-api:${{ env.IMAGE_TAG }} \
+              deashot-game-server=${{ env.REGISTRY }}/${{ env.DOCKER_REPO }}-game-server:${{ env.IMAGE_TAG }} \
+              deashot-web=${{ env.REGISTRY }}/${{ env.DOCKER_REPO }}-web:${{ env.IMAGE_TAG }}
+            kustomize build . > /tmp/deashot-manifests.yaml
+            kubectl apply -f /tmp/deashot-manifests.yaml
+            kubectl -n "$APP_NAMESPACE" rollout status deployment/web --timeout=180s
+            kubectl -n "$APP_NAMESPACE" rollout status deployment/api --timeout=180s
+            kubectl -n "$APP_NAMESPACE" rollout status deployment/game-server --timeout=180s
+            kubectl -n "$APP_NAMESPACE" get pods -o wide
+
+      - name: Summary
+        run: |
+          echo "Deployed deashot to ${{ env.VM_HOST }}"
+          echo "Images:"
+          echo "  ${{ env.REGISTRY }}/${{ env.DOCKER_REPO }}-web:${{ env.IMAGE_TAG }}"
+          echo "  ${{ env.REGISTRY }}/${{ env.DOCKER_REPO }}-api:${{ env.IMAGE_TAG }}"
+          echo "  ${{ env.REGISTRY }}/${{ env.DOCKER_REPO }}-game-server:${{ env.IMAGE_TAG }}"
